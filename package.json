@@ -4,8 +4,12 @@
   "private": true,
   "description": "A software factory: a one-page product spec in, a tested TypeScript project out.",
   "license": "UNLICENSED",
+  "bin": {
+    "factory": "src/cli/index.ts"
+  },
   "type": "module",
   "scripts": {
+    "factory": "bun run src/cli/index.ts",
     "check": "bash scripts/check.sh",
     "check:fast": "bash scripts/check.sh fast",
     "check:standard": "bash scripts/check.sh standard",
@@ -21,7 +25,8 @@
     "build": "bun build src/cli/index.ts --target=bun --outdir dist",
     "audit": "bun audit",
     "hooks:install": "lefthook install",
-    "apb:bootstrap": "bun run scripts/apb-bootstrap.ts"
+    "apb:bootstrap": "bun run scripts/apb-bootstrap.ts",
+    "e2e": "bun run scripts/e2e.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

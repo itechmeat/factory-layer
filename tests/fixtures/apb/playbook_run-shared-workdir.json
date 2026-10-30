@@ -1,0 +1,10 @@
+{
+  "tool": "playbook_run",
+  "args": {
+    "id": "smoke-wait",
+    "supervise": "self",
+    "worktree": "/project/wt-b2"
+  },
+  "isError": true,
+  "answer": "conflict: another write-run holds the workdir (pid 251244); give this run its own worktree or use --allow-shared-workdir"
+}

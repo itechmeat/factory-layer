@@ -1,0 +1,44 @@
+{
+  "tool": "trust_list",
+  "args": {},
+  "isError": false,
+  "answer": {
+    "approvals": [
+      {
+        "approved_at_ms": 1793367716748,
+        "digest": "sha256:d781d42fc16a3c90b29af7ae0091cf8bbf1470ef4e896b053071e515fd274806",
+        "id": "implement-task",
+        "kind": "playbook",
+        "origin_kind": "agent_generated"
+      },
+      {
+        "approved_at_ms": 1793367716805,
+        "digest": "sha256:4493fdedba4b2a17163b8a0763453d32f787d869cc71958d12717da7c0a739e9",
+        "id": "integrate",
+        "kind": "playbook",
+        "origin_kind": "agent_generated"
+      },
+      {
+        "approved_at_ms": 1793367716776,
+        "digest": "sha256:4c621b80e7bb3c3cfe6103fb3bf3ccb60fa53f73c6bf7077f09de30b982dce7e",
+        "id": "repair",
+        "kind": "playbook",
+        "origin_kind": "agent_generated"
+      },
+      {
+        "approved_at_ms": 1793367716717,
+        "digest": "sha256:96cba47bf50763e68600ee935768d7454c80b1d68198d29b79e1a6cbc7e85e89",
+        "id": "scaffold",
+        "kind": "playbook",
+        "origin_kind": "agent_generated"
+      },
+      {
+        "approved_at_ms": 1793367669880,
+        "digest": "sha256:935133681ebb3f1104d42b0f7a539bf8d91f25330983d2278d69cf0ccb02abcb",
+        "id": "claude",
+        "kind": "profile_bundle",
+        "origin_kind": "agent_generated"
+      }
+    ]
+  }
+}

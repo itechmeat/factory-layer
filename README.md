@@ -6,7 +6,7 @@ judges the results and recovers from failures until it delivers a small
 TypeScript project (a CLI or an HTTP API) whose tests pass. Every run leaves
 a trace of tasks, attempts, models, timings and usage.
 
-Status: under construction.
+Status: the first milestone delivers a one-page CLI spec end to end.
 
 ## Requirements
 
@@ -16,8 +16,8 @@ Status: under construction.
    work through `apb mcp`.
 4. `o2b` (Open Second Brain) 1.96.0 on `PATH`: the factory keeps its memory
    in a dedicated vault through `o2b mcp`.
-5. The Claude Code and Codex CLIs, installed and logged in: the `coder`
-   profile runs Claude Code first and falls back to Codex.
+5. The agent CLI the starter playbooks use, installed and logged in: Claude
+   Code by default (see "Agent profiles" below).
 6. code-ranker on `PATH` for the full check tier.
 
 ## Checks
@@ -29,6 +29,80 @@ bash scripts/check.sh standard  # all unit tests, the build
 bun run check                   # full gate (default)
 ```
 
+## Running the factory
+
+```bash
+bun run factory doctor                         # check the setup before a run
+bun run factory run examples/specs/wordfreq.md # build a package from a spec
+bun run factory report <runId>                 # print the report of a run
+bun run factory intervene <runId> "<note>"     # record a human intervention
+```
+
+`factory doctor` checks, one line each, that the brain model answers
+through its submit tool (naming the provider and model that answered),
+whether Mozaik Cloud is off, on or refused (see below), that
+`apb mcp` answers and the starter playbooks and the agent profile are
+approved at their current versions, that the agent CLI is logged in, that
+`o2b mcp` answers on the factory vault, and that git, Bun and npm are
+installed. It names what to fix for every failed check.
+
+`factory run <spec.md>` takes `--out <dir>` (default `out/<spec name>`),
+`--runtimes bun,npm` (the runtimes the delivered package must pass under)
+and `--deliver-unverified` (copy the result even when it is not verified).
+It prints the run id, every task transition and decision, then the
+outcome, the delivered directory and the path of the run's report. The
+run's state, trace and report live under `runs/<runId>/`; task trees live
+under `work/`. Exit codes: 0 succeeded, 1 failed, 2 usage error, 3 partial.
+The first SIGINT or SIGTERM takes the cutoff path (live runs are stopped
+and what is integrated is delivered); a second one exits at once with 130,
+since the run state is saved on every change.
+
+### Trust model
+
+The factory runs code it did not write. The acceptance commands are written
+by the brain model, and the package under test is written by the coding
+agents; both run on this machine as the operator's user. What limits them:
+
+1. Every install, build, test, acceptance check and HTTP server sees an
+   allowlisted environment only (`PATH`, `LANG`, `CI=1`, `PORT` where
+   needed and a scratch `HOME` that lives for one batch), never the
+   factory's own environment, so no provider key reaches it.
+2. Installs run with `--ignore-scripts`; the build is its own step.
+3. The run state and trace stay owner-only (`runs/<runId>/` is 0700, its
+   files 0600), and the run state never holds a provider key.
+
+This is not a sandbox: the code can read and write whatever the user can,
+including this repository (the task trees live under `work/` inside it).
+Run the factory on a machine or account you are fine exposing to that.
+
+### The end-to-end run
+
+```bash
+bun run e2e examples/specs/wordfreq.md --deadline-min 30
+```
+
+The end-to-end run is the factory's main acceptance test. It runs
+`factory run` on the practice spec under a unique spec name, then verifies
+the delivered package on its own: the package tests under Bun and under
+npm from clean copies, and every example of the spec under Node. It prints
+the outcome, the wall time and the time and cost of every task, and passes
+only when the outcome is `succeeded`, both runtimes pass and every example
+holds. Every child process ends by the absolute deadline.
+
+A recorded passing run of the `wordfreq` spec (three tasks after one
+runtime re-plan, brain on GLM-5.3 Flash, coding agent Claude Code on
+Sonnet 5.5):
+
+| Task | Time | Cost |
+| --- | --- | --- |
+| `scaffold` | 25 s | $0.063 |
+| `count-words` | 1 min 9 s | $0.065 |
+| `cli-main` | 32 s | $0.096 |
+| Whole run | 2 min 50 s | $0.227 |
+
+The costs are the ones the agents reported plus the brain calls computed
+from `config/prices.json`; the report of a run says which is which.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and fill it in. Bun loads `.env` for
@@ -36,6 +110,10 @@ Copy `.env.example` to `.env` and fill it in. Bun loads `.env` for
 
 | Variable | What it is |
 | --- | --- |
+| `FACTORY_BRAIN_GATEWAY` | Set to `1` to use the JigJoy gateway as the brain's first provider (Claude credits are kept for the demo); otherwise Z.ai is primary and the `JIGJOY_*` keys are ignored |
+| `JIGJOY_ANTHROPIC_API_KEY`, `JIGJOY_ANTHROPIC_BASE_URL` | Anthropic gateway (JigJoy), read only when `FACTORY_BRAIN_GATEWAY=1`, then both are required; Z.ai becomes the fallback. The `ANTHROPIC_*` names are never read, so Claude Code does not pick the gateway up |
+| `FACTORY_MOZAIK_CLOUD`, `MOZAIK_API_KEY`, `MOZAIK_PROJECT_ID`, `MOZAIK_REDACTION` | Optional, opt-in: with `FACTORY_MOZAIK_CLOUD=1` and a Mozaik key, the brain's loop events (spec text, task descriptions, redacted executor reports) are sent to Mozaik Cloud and the live link is printed; `MOZAIK_REDACTION` defaults to `content` (texts sent as sizes only), `none` sends them in full; a key without the opt-in makes the brain refuse to start. Tests never export unless `FACTORY_TEST_MOZAIK_CLOUD=1` |
+| `JIGJOY_ANTHROPIC_MODEL` | Model behind the gateway; optional, defaults to `claude-sonnet-4-6` |
 | `ZAI_API_KEY` | API key of the brain model's OpenAI-compatible endpoint |
 | `ZAI_BASE_URL` | Base URL of that endpoint; optional, defaults to `https://api.z.ai/api/coding/paas/v4` |
 | `ZAI_MODEL` | Model id the brain uses; optional, defaults to `glm-5.3-flash` |
@@ -63,14 +141,42 @@ separate one without touching your own Open Second Brain configuration:
 Do not run `o2b init` for this: it rewrites your global Open Second Brain
 configuration.
 
+## Agent profiles
+
+The coding work runs through APB agent profiles under `.apb/profiles/`, one
+per supported agent CLI and named after it:
+
+| Profile | Agent CLI | Model |
+| --- | --- | --- |
+| `claude` | Claude Code | `claude-sonnet-5-5` |
+| `codex` | Codex | `gpt-6-sol` |
+| `opencode` | opencode | `opencode/glm-5.3-flash-free` |
+| `zcode` | ZCode | `GLM-5.3-Flash` |
+| `agy` | agy | `gemini-3.8-flash-high` |
+| `grok` | Grok | `grok-4.3` |
+
+Each has no fallback and the same short role prompt (`SOUL.md`). The four
+starter playbooks (`scaffold`, `implement-task`, `repair`, `integrate`)
+default to `claude`. To run them with another CLI, run the bootstrap with
+`--agent` (below).
+
+Claude Code loads every `CLAUDE.md` from its working directory up to the
+filesystem root, and the task trees live inside this repository. The
+factory therefore starts `apb mcp` with `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`
+in its environment, which the agent processes inherit, so a coding agent
+never sees this repository's own instructions. APB profiles choose which
+variables an agent inherits but cannot set one, which is why the variable
+comes from the factory and not from the profile.
+
 ## APB trust bootstrap
 
 APB runs only playbooks and agent profiles that are approved in its trust
 store, and the trust store belongs to the machine, not to the repository. On
-a new machine, or after the profiles or the smoke playbooks change, run:
+a new machine, or after the profiles or the playbooks change, run:
 
 ```bash
-bun run apb:bootstrap
+bun run apb:bootstrap                 # starters keep their default profile
+bun run apb:bootstrap --agent codex   # starters switched to the codex profile
 ```
 
 From the repository root it:
@@ -79,15 +185,24 @@ From the repository root it:
    `profile.yaml` and `SOUL.md`, which approves the profile's bundle, and
    checks that the write reports the bundle trusted, with no failed trust
    write and no unapproved skills;
-2. starts `apb mcp` and approves the `smoke` and `smoke-stall` playbooks;
-3. prints the trust list entries it created.
+2. with `--agent <cli>`, republishes the four starter playbooks through APB
+   with that profile as their default (a new playbook version each; a
+   starter that already defaults to it is left alone);
+3. starts `apb mcp` and approves the `smoke`, `smoke-stall` and
+   `smoke-fail` playbooks and the four starters;
+4. prints the trust list entries it created.
 
-The two smoke playbooks are approved by explicit confirmation rather than by
-an APB trial, because APB cannot trial a script playbook before the
-repository has its first commit. Both are single script nodes with no model
-and no file writes: `smoke` prints one fixed line, `smoke-stall` sleeps for
-an hour so the stop path can be exercised. The starter coding playbooks are
-trialled and approved in a later milestone.
+The playbooks are approved by explicit confirmation rather than by an APB
+trial: APB cannot trial a script playbook before the repository has its
+first commit, and it would trial a coding playbook in a worktree of this
+repository instead of a task tree. Review them before the first bootstrap.
+The three smokes are single script nodes with no model and no file writes:
+`smoke` prints one fixed line, `smoke-stall` sleeps for an hour so the stop
+path can be exercised, and `smoke-fail` exits 1 so a node failure can be
+observed. Each starter is one agent node that works in the task tree it is
+given, owns only the paths it is told, runs `npm test` and `bun test`, and
+reports a summary and its checks; only `integrate` commits (the merge it
+resolves), and none pushes.
 
 APB finds its trust store through `APB_CONFIG_DIR`, then
 `XDG_CONFIG_HOME`, then `HOME`. Set `APB_CONFIG_DIR` to bootstrap and test

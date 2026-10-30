@@ -6,5 +6,9 @@
 # over the integration smokes, would report the coverage of that subset, not
 # of the repository. Coverage is reported by the all-unit-tests run of the
 # `standard` and `full` tiers.
+#
+# The preload is the same as in `bunfig.toml`: no test, integration smokes
+# included, exports loop events to Mozaik Cloud unless asked.
 [test]
+preload = ["./tests/support/no-cloud-export.ts"]
 coverage = false

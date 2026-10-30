@@ -152,17 +152,22 @@ to the `Brain` port.
 ### 6.2 The brain: Mozaik agents on one bus
 
 Inside `brain-mozaik`, all agents join one Mozaik runtime with a shared
-`RuntimeState`. Each `Brain` method starts a loop on the agent that owns it;
-the adapter resolves the method's promise when that agent emits its typed
-answer event (`sendEvent`), validated by Zod. Loop guards: one active loop per
-agent per (task, revision); a duplicate request returns the pending promise.
+`RuntimeState`. Each `Brain` method is one decision attempt on the agent
+that owns it: a loop with the role's prompt and a submit tool built for
+that attempt from the decision's Zod schema. The answer arrives as the
+model's call of that per-attempt submit tool, not as a `sendEvent`: the
+tool validates the arguments (invalid ones go back to the model with the
+Zod message), a valid submission settles the attempt's promise once, and
+the next inference is replaced by a final message so the loop ends. A step
+cap and a loop that ends without a submission fail the attempt. The caller
+(the application) bounds and retries each decision.
 
 Loop lifecycle contract (`runLoop` returns `void` and the published runtime
 does not await or catch the loop promise):
 
-1. Attempt correlation: every `Brain` request gets an attempt id, carried in
-   the loop's input and required in the answer event; answers with an
-   unknown or expired attempt id are dropped and traced.
+1. Attempt correlation: every attempt has its own submit tool and settles
+   exactly once, so a late submission of a cancelled or timed-out attempt
+   cannot answer a newer one.
 2. Guarded inference: the adapter installs its own `InferenceRunner` (via
    `inferenceRunnerConfig.runner`) wrapping `DefaultInferenceRunner` with a
    per-call deadline, provider fallback, and a cancellation check: once an

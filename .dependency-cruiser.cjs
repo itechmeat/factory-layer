@@ -23,7 +23,7 @@ const LAYERS = ['domain', 'ports', 'application', 'adapters', 'cli'];
 const KNOWN_VIOLATIONS = {};
 
 const layerPath = (layer) => `^src/${layer}/`;
-const escaped = (modulePath) => `^src/${modulePath.replace(/\./g, '\\.')}$`;
+const escaped = (modulePath) => `^src/${modulePath.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')}$`;
 const layerOf = (modulePath) => modulePath.split('/')[0];
 const exceptionsIn = (layer) => Object.keys(KNOWN_VIOLATIONS).filter((modulePath) => layerOf(modulePath) === layer);
 

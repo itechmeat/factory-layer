@@ -1,0 +1,16 @@
+{
+  "tool": "supervisor_wait_event",
+  "args": {
+    "token": "REDACTED",
+    "timeout_ms": 5000
+  },
+  "isError": false,
+  "answer": {
+    "next_after_seq": null,
+    "pending_review": null,
+    "pending_supervisor": null,
+    "reason": "timeout",
+    "run_status": "running",
+    "wake": null
+  }
+}

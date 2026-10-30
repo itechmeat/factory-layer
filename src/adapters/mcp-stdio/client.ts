@@ -7,8 +7,9 @@
  *
  * Invariants: every wait is bounded; the child pid is recorded as soon as
  * the process starts, before the handshake, so a failed connect and a close
- * both end with the process gone; every reported text is redacted of the
- * configured secrets.
+ * both end with the process gone; an optional abort signal fails a pending
+ * connect and closes a connected client, so the process never outlives it;
+ * every reported text is redacted of the configured secrets.
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -49,7 +50,12 @@ export interface McpStdioOptions {
   readonly closeGraceMs?: number;
   /** Values replaced with `[redacted]` in every error, cause and stderr text. */
   readonly secrets?: readonly string[];
+  /** Aborting it fails a pending connect and closes the client, ending the process. */
+  readonly signal?: AbortSignal;
 }
+
+/** The tunables with their defaults applied; the signal is handled apart. */
+type Settings = Required<Omit<McpStdioOptions, 'signal'>>;
 
 /** Per-call options. */
 export interface McpCallOptions {
@@ -83,6 +89,9 @@ export interface McpStdioClient {
 // JSON-RPC error codes of the SDK as plain numbers, the type `McpError.code` has.
 const REQUEST_TIMEOUT_CODE: number = ErrorCode.RequestTimeout;
 const CONNECTION_CLOSED_CODE: number = ErrorCode.ConnectionClosed;
+
+/** The part of a JSON-RPC error's `data` this client reads: the server's refusal code. */
+const ErrorDataSchema = z.looseObject({ code: z.string() });
 
 const ServerInfoSchema = z.object({ name: z.string(), version: z.string() });
 const ToolListSchema = z.object({
@@ -129,16 +138,21 @@ class ConnectedClient implements McpStdioClient {
   private readonly sdk: Client;
   private readonly server: McpServerCommand;
   private readonly tail: StderrTail;
-  private readonly settings: Required<McpStdioOptions>;
+  private readonly settings: Settings;
   private readonly secrets: string[];
+  private readonly signal: AbortSignal | undefined;
+  private readonly onAbort = (): void => {
+    void this.close();
+  };
 
   constructor(parts: {
     sdk: Client;
     server: McpServerCommand;
     tail: StderrTail;
-    settings: Required<McpStdioOptions>;
+    settings: Settings;
     pid: number;
     serverInfo: { name: string; version: string };
+    signal: AbortSignal | undefined;
   }) {
     this.sdk = parts.sdk;
     this.server = parts.server;
@@ -147,6 +161,9 @@ class ConnectedClient implements McpStdioClient {
     this.secrets = [...parts.settings.secrets];
     this.pid = parts.pid;
     this.serverInfo = parts.serverInfo;
+    this.signal = parts.signal;
+    if (this.signal?.aborted === true) this.onAbort();
+    else this.signal?.addEventListener('abort', this.onAbort, { once: true });
   }
 
   stderrTail(): string {
@@ -191,6 +208,7 @@ class ConnectedClient implements McpStdioClient {
   }
 
   close(): Promise<void> {
+    this.signal?.removeEventListener('abort', this.onAbort);
     this.closing ??= terminateProcess({
       pid: this.pid,
       graceMs: this.settings.closeGraceMs,
@@ -226,7 +244,9 @@ class ConnectedClient implements McpStdioClient {
         throw new McpValidationError(operation, this.redact(z.prettifyError(error)));
       }
       if (error instanceof McpError && error.code !== CONNECTION_CLOSED_CODE) {
-        throw new McpToolError(operation, this.redact(error.message));
+        const data = ErrorDataSchema.safeParse(error.data);
+        const code = data.success ? this.redact(data.data.code) : undefined;
+        throw new McpToolError(operation, this.redact(error.message), code);
       }
       await drainPendingIo();
       throw new McpConnectionError({
@@ -245,7 +265,7 @@ class ConnectedClient implements McpStdioClient {
  * promise rejects with a `McpConnectionError`.
  */
 export async function connectMcpStdio(server: McpServerCommand, options: McpStdioOptions = {}): Promise<McpStdioClient> {
-  const settings: Required<McpStdioOptions> = {
+  const settings: Settings = {
     connectTimeoutMs: options.connectTimeoutMs ?? MCP_CONNECT_TIMEOUT_MS,
     callTimeoutMs: options.callTimeoutMs ?? MCP_CALL_TIMEOUT_MS,
     closeGraceMs: options.closeGraceMs ?? MCP_CLOSE_GRACE_MS,
@@ -260,9 +280,14 @@ export async function connectMcpStdio(server: McpServerCommand, options: McpStdi
   transport.stderr?.on('data', (chunk: Uint8Array) => tail.append(decoder.decode(chunk, { stream: true })));
   const sdk = new Client(MCP_CLIENT_INFO, { capabilities: {} });
 
+  const signal = options.signal;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<'deadline'>((resolve) => {
+  let onAbort: (() => void) | undefined;
+  const deadline = new Promise<'deadline' | 'aborted'>((resolve) => {
     timer = setTimeout(() => resolve('deadline'), settings.connectTimeoutMs);
+    onAbort = () => resolve('aborted');
+    if (signal?.aborted === true) onAbort();
+    else signal?.addEventListener('abort', onAbort, { once: true });
   });
   let failure: string;
   let cause: unknown;
@@ -271,14 +296,18 @@ export async function connectMcpStdio(server: McpServerCommand, options: McpStdi
     if (outcome === 'connected') {
       if (pid === undefined) throw new Error('the transport started without a process id');
       const serverInfo = ServerInfoSchema.parse(sdk.getServerVersion());
-      return new ConnectedClient({ sdk, server, tail, settings, pid, serverInfo });
+      return new ConnectedClient({ sdk, server, tail, settings, pid, serverInfo, signal });
     }
-    failure = `did not complete the handshake within ${settings.connectTimeoutMs} ms`;
+    failure =
+      outcome === 'aborted'
+        ? 'the connect was aborted before the handshake completed'
+        : `did not complete the handshake within ${settings.connectTimeoutMs} ms`;
   } catch (error) {
     cause = error;
     failure = `could not connect: ${messageOf(error)}`;
   } finally {
     clearTimeout(timer);
+    if (onAbort !== undefined) signal?.removeEventListener('abort', onAbort);
   }
 
   let teardown = '';

@@ -4,6 +4,8 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { apbMcpCommand } from '../../src/adapters/hands-apb/apb-command';
+import { ApbExecutor } from '../../src/adapters/hands-apb/apb-executor';
+import type { ExecutorEvent } from '../../src/ports/executor';
 import { FOLLOW_RUN_CLEANUP_BUDGET_MS, followRun, type FollowRunOutcome } from '../../src/adapters/hands-apb/follow-run';
 import type { StartRecovery } from '../../src/adapters/hands-apb/recover-start';
 import { connectMcpStdio } from '../../src/adapters/mcp-stdio/client';
@@ -87,4 +89,73 @@ test(
     expect(outcome.elapsedMs).toBeLessThan(STALL_RUN_LIMIT_MS + FOLLOW_RUN_CLEANUP_BUDGET_MS);
   },
   STALL_RUN_LIMIT_MS + FOLLOW_RUN_CLEANUP_BUDGET_MS + TEST_SLACK_MS,
+);
+
+/** Budget of the executor smoke on `smoke-fail`, in milliseconds. */
+const FAIL_SMOKE_LIMIT_MS = 120_000;
+
+/** Waits until an event other than `quiet` arrives, within `deadline` (a `performance.now()` value). */
+async function nextEvent(
+  executor: ApbExecutor,
+  runId: string,
+  afterSeq: number,
+  deadline: number,
+): Promise<{ event: ExecutorEvent; nextAfterSeq: number }> {
+  let cursor = afterSeq;
+  while (performance.now() < deadline) {
+    const served = await executor.waitEvent(runId, cursor, Math.min(10_000, Math.max(1, deadline - performance.now())));
+    if (served.event.kind !== 'quiet') return served;
+    cursor = served.nextAfterSeq;
+  }
+  throw new Error(`no event from ${runId} before the deadline`);
+}
+
+test(
+  'APB executor smoke: smoke-fail wakes with a node failure, parks quiet, a re-attached executor sees the failure again, a posted retry fails again, the stop is confirmed and the report counts both attempts',
+  async () => {
+    const deadline = performance.now() + FAIL_SMOKE_LIMIT_MS;
+    const tree = join(REPO_ROOT, 'work', `smoke-fail-${randomUUID()}`);
+    mkdirSync(tree, { recursive: true });
+    const apbPath = requireBinary('apb');
+    const executor = new ApbExecutor(() => connectMcpStdio(apbMcpCommand(apbPath, REPO_ROOT)));
+    // Set once the run started: a failed assertion still stops it before its tree is removed.
+    let liveRunId: string | undefined;
+    try {
+      const start = await executor.startRun({
+        dispatchKey: 'smoke',
+        playbook: 'smoke-fail',
+        tree,
+        inputs: { taskText: 'smoke', ownedPaths: [] },
+      });
+      if (!start.ok) throw new Error(`smoke-fail did not start: ${start.detail}; ${TRUST_HINT}`);
+      liveRunId = start.runId;
+      const first = await nextEvent(executor, start.runId, 0, deadline);
+      expect(first.event).toMatchObject({ kind: 'wake', trigger: 'node_failed', nodeId: 'fail' });
+      expect((await executor.waitEvent(start.runId, first.nextAfterSeq, 2000)).event).toEqual({ kind: 'quiet' });
+      const restarted = new ApbExecutor(() => connectMcpStdio(apbMcpCommand(apbPath, REPO_ROOT)));
+      try {
+        expect(await restarted.attach(start.runId, start.supervisorToken)).toMatchObject({ attached: true });
+        expect((await restarted.waitEvent(start.runId, first.nextAfterSeq, 2000)).event).toMatchObject({
+          kind: 'wake',
+          trigger: 'node_failed',
+          nodeId: 'fail',
+        });
+      } finally {
+        await restarted.close();
+      }
+      expect(await executor.retryNode(start.runId, 'fail')).toMatchObject({ accepted: true });
+      const second = await nextEvent(executor, start.runId, first.nextAfterSeq, deadline);
+      expect(second.event).toMatchObject({ kind: 'wake', trigger: 'node_failed', nodeId: 'fail' });
+      expect(await executor.stop(start.runId, 30_000)).toMatchObject({ outcome: 'stopped' });
+      liveRunId = undefined;
+      const report = await executor.report(start.runId);
+      expect(report).toMatchObject({ status: 'stopped', nodes: [{ nodeId: 'fail', outcome: 'failed', attempts: 2 }], usage: [] });
+    } finally {
+      // Best effort: a failed stop here must not hide the assertion that failed first.
+      if (liveRunId !== undefined) await executor.stop(liveRunId, 30_000).catch(() => undefined);
+      await executor.close();
+      rmSync(tree, { recursive: true, force: true });
+    }
+  },
+  FAIL_SMOKE_LIMIT_MS + TEST_SLACK_MS,
 );

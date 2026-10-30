@@ -1,0 +1,8 @@
+name: claude
+description: 'TypeScript coding agent of the factory: code and unit tests inside one working tree'
+executor:
+  agent: claude
+  model: claude-sonnet-5-5
+  fallbacks: []
+soul: any
+skills: []

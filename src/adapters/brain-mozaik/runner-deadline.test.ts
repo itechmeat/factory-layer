@@ -75,7 +75,7 @@ describe('GuardedInferenceRunner: attempt deadline', () => {
     const attempt = runner.bind(context, { deadlineMs: DEADLINE_MS });
     expect((await timed(runner.run(input))).error.kind).toBe('timeout');
     expect(attempt.cancelled).toBe(true);
-    expect(attempt.calls).toHaveLength(0);
+    expect(attempt.calls.map((call) => call.usage)).toEqual([{ kind: 'unavailable', reason: 'call_failed' }]);
 
     const streaming = setup(
       new FakeEndpoint({

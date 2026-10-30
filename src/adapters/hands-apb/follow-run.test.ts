@@ -45,7 +45,7 @@ describe('followRun: success and own endings', () => {
       playbook_run: started,
       supervisor_wait_event: sequence(
         wait('timeout', 'running'),
-        wait('wake', 'running', { next_after_seq: 7, wake: { seq: 7 } }),
+        wait('wake', 'running', { next_after_seq: 7, wake: { seq: 7, trigger: 'anomaly', node: null } }),
         wait('ended', 'succeeded', { next_after_seq: 7 }),
       ),
     });

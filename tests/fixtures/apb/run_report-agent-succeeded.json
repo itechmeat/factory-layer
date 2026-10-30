@@ -1,0 +1,108 @@
+{
+  "tool": "run_report",
+  "args": {
+    "run_id": "implement-task-1793367914147"
+  },
+  "isError": false,
+  "answer": {
+    "answer": null,
+    "attempt_models": [
+      {
+        "agent": "claude",
+        "attempt": 1,
+        "executed_by": "cli",
+        "expected": "claude-sonnet-5-5",
+        "mismatch": false,
+        "model": "claude-sonnet-5-5",
+        "node": "implement"
+      }
+    ],
+    "decisions": {
+      "by_use": {
+        "completion_check": {
+          "applied": 0,
+          "errors": 0,
+          "requests": 1,
+          "shadow_would_change": 0
+        }
+      },
+      "cost_estimated": false,
+      "cost_usd": 0,
+      "decisions": 1,
+      "errors": 0,
+      "p50_latency_ms": 2515,
+      "p95_latency_ms": 2515,
+      "replayed": 0,
+      "requests": 1
+    },
+    "duration_table": [
+      {
+        "expected_seconds": 0,
+        "kind": "start",
+        "measured_seconds": 0,
+        "node": "start"
+      },
+      {
+        "expected_seconds": 900,
+        "kind": "agent_task",
+        "measured_seconds": 10,
+        "node": "implement"
+      },
+      {
+        "expected_seconds": 0,
+        "kind": "finish",
+        "measured_seconds": null,
+        "node": "finish"
+      }
+    ],
+    "nodes": {
+      "finish": "succeeded",
+      "implement": "succeeded",
+      "start": "succeeded"
+    },
+    "outcome": {
+      "done": ["succeeded: implement"],
+      "findings": [],
+      "headline": "Run succeeded; nothing checked by the engine; 1 not verified",
+      "unverified": [
+        {
+          "detail": "the agent's own report is the only evidence",
+          "kind": "self_reported_node",
+          "subject": "implement"
+        }
+      ],
+      "verified": [],
+      "warnings": []
+    },
+    "outputs": {
+      "finish": "",
+      "implement": "{\"checks\":\"bun test (before hello.ts): 1 fail\\nnpm test: 1 pass, 0 fail\\nbun test: 1 pass, 0 fail\",\"summary\":\"Added hello.ts exporting hello() returning 'hi' and hello.test.ts with one unit test (written first, failed without hello.ts).\"}",
+      "start": ""
+    },
+    "progress": {
+      "label": null,
+      "pending_question": null,
+      "pending_questions": [],
+      "pending_review": null,
+      "pending_reviews": [],
+      "pending_supervisor": null,
+      "pending_waits": [],
+      "percent": 100,
+      "plan_key": "1.1.0|",
+      "waiting_kind": null,
+      "waiting_on": null
+    },
+    "run_id": "implement-task-1793367914147",
+    "run_status": "succeeded",
+    "usage": {
+      "attempts": 1,
+      "cache_read_tokens": 68687,
+      "cache_write_tokens": 7663,
+      "cost_attempts": 1,
+      "cost_usd": 0.045276699999999996,
+      "finished_attempts": 1,
+      "input_tokens": 8,
+      "output_tokens": 774
+    }
+  }
+}

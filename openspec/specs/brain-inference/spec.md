@@ -1,8 +1,8 @@
 # brain-inference Specification
 
 ## Purpose
-The brain reasons through a hosted model behind an OpenAI-compatible
-endpoint. This capability defines one model call: how it is configured, how
+The brain reasons through a hosted model: Anthropic through the JigJoy
+gateway when switched on, else an OpenAI-compatible endpoint. This capability defines one model call: how it is configured, how
 long it may take, how it fails and how its usage is reported.
 
 ## Requirements
@@ -31,6 +31,40 @@ the variable and SHALL never print a key value.
 
 - **WHEN** `FALLBACK_API_KEY` is set but `FALLBACK_MODEL` is empty
 - **THEN** reading the configuration fails with an error naming the missing fallback variable
+
+### Requirement: Gateway provider from the environment
+
+Only when `FACTORY_BRAIN_GATEWAY=1`, Anthropic messages through
+`JIGJOY_ANTHROPIC_BASE_URL` and `JIGJOY_ANTHROPIC_API_KEY` SHALL be the first
+provider (model `JIGJOY_ANTHROPIC_MODEL`, default `claude-sonnet-4-6`), Z.ai
+the next and the fallback the last; a missing one of the two SHALL be an
+error naming it. Otherwise the `JIGJOY_*` variables SHALL be ignored. The
+`ANTHROPIC_*` names SHALL never be read.
+
+#### Scenario: Gateway first
+
+- **WHEN** `FACTORY_BRAIN_GATEWAY=1` and the `JIGJOY_ANTHROPIC_*` and `ZAI_*` variables are set
+- **THEN** the providers are the gateway with `claude-sonnet-4-6`, then Z.ai
+
+#### Scenario: Flag off
+
+- **WHEN** the flag is not `1` and the `JIGJOY_ANTHROPIC_*` variables are set, even half
+- **THEN** Z.ai is the first provider and no error is raised
+
+#### Scenario: Flag on, key missing
+
+- **WHEN** `FACTORY_BRAIN_GATEWAY=1` and `JIGJOY_ANTHROPIC_BASE_URL` is not set
+- **THEN** reading the configuration fails with an error naming `JIGJOY_ANTHROPIC_BASE_URL`
+
+### Requirement: Distinct models and contained keys
+
+Every configured model SHALL be unique across the providers, and no
+provider key SHALL reach `apb mcp`, generated code or git.
+
+#### Scenario: Same model twice
+
+- **WHEN** `JIGJOY_ANTHROPIC_MODEL` equals `ZAI_MODEL`
+- **THEN** reading the configuration fails with an error naming `JIGJOY_ANTHROPIC_MODEL`
 
 ### Requirement: Function calling
 
@@ -135,7 +169,8 @@ errors are not). The error text SHALL never contain the API key.
 
 ### Requirement: Usage reporting
 
-Each successful call SHALL report input and output tokens as measured when
+Each successful call SHALL report input and output tokens, and for Anthropic
+the cache read and cache write tokens apart, as measured when
 the provider returns them, and as unavailable otherwise; usage SHALL never be
 estimated from text length without being marked estimated. The elapsed wall
 time of the call SHALL always be reported.
@@ -144,3 +179,29 @@ time of the call SHALL always be reported.
 
 - **WHEN** the provider response includes token counts
 - **THEN** the call reports them marked measured, together with the elapsed time
+
+### Requirement: Provider fallback
+
+When the primary provider fails with a retryable error (rate limit,
+unavailable, timeout) and a fallback is configured, the next try of the
+same decision SHALL use the fallback, and the primary SHALL be skipped for a
+cooldown (default 60 s). Non-retryable errors SHALL NOT switch providers.
+The usage record of each try SHALL name the provider and model actually
+used. The OpenAI client inside the endpoint retries on its own and cannot be
+configured; the attempt deadline bounds those retries.
+
+#### Scenario: Rate limited primary
+
+- **WHEN** the primary answers with a rate-limit error and a fallback is configured
+- **THEN** the next try uses the fallback, and the primary is not used again before the cooldown ends
+
+### Requirement: Vendor request fields
+
+A provider SHALL be able to carry fixed vendor fields merged into every request (for the
+Z.ai model: thinking disabled), declared in the provider configuration, not
+in the decision.
+
+#### Scenario: Thinking disabled
+
+- **WHEN** the Z.ai provider sends a request
+- **THEN** the request body carries the configured field that disables thinking

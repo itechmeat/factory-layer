@@ -1,0 +1,17 @@
+{
+  "tool": "playbook_run",
+  "args": {
+    "id": "smoke-untrusted",
+    "supervise": "self",
+    "worktree": "/project/wtg-b1"
+  },
+  "isError": false,
+  "answer": {
+    "policy_refusal": {
+      "detail": "run again with acknowledge_untrusted: true after user confirmation",
+      "digest": "sha256:312d4edcd6b74dcc5fe5a91d36ebdb07503a431d5d46f5b17b74ec79b82fbb00",
+      "id": "smoke-untrusted",
+      "policy": "untrusted_requires_acknowledge"
+    }
+  }
+}

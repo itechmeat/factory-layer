@@ -23,19 +23,13 @@ export function isProcessAlive(pid: number): boolean {
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
 /** Polls until the pid is gone or `ms` has passed; true when it is gone. */
 async function waitForExit(pid: number, ms: number): Promise<boolean> {
   const deadline = performance.now() + ms;
   while (isProcessAlive(pid)) {
     const left = deadline - performance.now();
     if (left <= 0) return false;
-    await sleep(Math.min(PID_POLL_INTERVAL_MS, left));
+    await Bun.sleep(Math.min(PID_POLL_INTERVAL_MS, left));
   }
   return true;
 }

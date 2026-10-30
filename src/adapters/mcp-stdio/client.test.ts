@@ -123,6 +123,20 @@ describe('tool calls', () => {
     await expect(call).rejects.toThrow(/unknown tool nope/);
   });
 
+  test('a JSON-RPC error with a data code rejects with a tool error carrying that code', async () => {
+    const client = await connect();
+    const error: unknown = await client.callTool('coded-fail', { code: 'exists' }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(McpToolError);
+    expect(error).toMatchObject({ kind: 'tool', tool: 'coded-fail', code: 'exists' });
+  });
+
+  test('an error without a data code leaves the code undefined', async () => {
+    const client = await connect();
+    const error: unknown = await client.callTool('nope', {}).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(McpToolError);
+    expect(error).toMatchObject({ kind: 'tool', code: undefined });
+  });
+
   test('a server that dies during a call yields a connection error with its stderr tail', async () => {
     const client = await connect();
     const error: unknown = await client.callTool('crash', {}).catch((caught: unknown) => caught);
@@ -158,6 +172,28 @@ describe('close', () => {
   });
 });
 
+describe('abort signal', () => {
+  test('an abort during the handshake fails the connect at once and the process is gone', async () => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 100);
+    const started = performance.now();
+    const error = await connectError(['--mode', 'silent'], { connectTimeoutMs: 10_000, closeGraceMs: 500, signal: controller.signal });
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(error.message).toContain('aborted');
+    expect(isProcessAlive(error.pid ?? 0)).toBe(false);
+  });
+
+  test('an abort after the connect closes the client: the pending call ends and the process is gone', async () => {
+    const controller = new AbortController();
+    const client = await connect([], { closeGraceMs: 500, signal: controller.signal });
+    const pending = client.callTool('slow', {}, { timeoutMs: 10_000 }).catch((caught: unknown) => caught);
+    setTimeout(() => controller.abort(), 50);
+    expect(await pending).toBeInstanceOf(McpClosedError);
+    await client.close();
+    expect(isProcessAlive(client.pid)).toBe(false);
+  });
+});
+
 describe('redaction', () => {
   test('a leaked secret is absent from the tool error and the stderr tail', async () => {
     const client = await connect(['--secret', SECRET], { secrets: [SECRET] });
@@ -167,6 +203,14 @@ describe('redaction', () => {
     expect(String(error)).not.toContain(SECRET);
     expect(client.stderrTail()).toContain('[redacted]');
     expect(client.stderrTail()).not.toContain(SECRET);
+  });
+
+  test('a leaked secret is absent from the code and the message of a coded tool error', async () => {
+    const client = await connect(['--secret', SECRET], { secrets: [SECRET] });
+    const error: unknown = await client.callTool('coded-fail', { code: `bad-${SECRET}` }).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: 'bad-[redacted]' });
+    expect(String(error)).toContain('[redacted]');
+    expect(String(error)).not.toContain(SECRET);
   });
 
   test('a secret added after connect is redacted from tool errors and the stderr tail', async () => {

@@ -1,0 +1,8 @@
+name: zcode
+description: 'TypeScript coding agent of the factory: code and unit tests inside one working tree'
+executor:
+  agent: zcode
+  model: GLM-5.3-Flash
+  fallbacks: []
+soul: any
+skills: []

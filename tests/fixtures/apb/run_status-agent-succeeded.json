@@ -1,0 +1,127 @@
+{
+  "tool": "run_status",
+  "args": {
+    "run_id": "implement-task-1793367914147"
+  },
+  "isError": false,
+  "answer": {
+    "answer": null,
+    "attempt_models": [
+      {
+        "agent": "claude",
+        "attempt": 1,
+        "executed_by": "cli",
+        "expected": "claude-sonnet-5-5",
+        "mismatch": false,
+        "model": "claude-sonnet-5-5",
+        "node": "implement"
+      }
+    ],
+    "children": [],
+    "continued_from": null,
+    "decisions": {
+      "by_use": {
+        "completion_check": {
+          "applied": 0,
+          "errors": 0,
+          "requests": 1,
+          "shadow_would_change": 0
+        }
+      },
+      "cost_estimated": false,
+      "cost_usd": 0,
+      "decisions": 1,
+      "errors": 0,
+      "p50_latency_ms": 2515,
+      "p95_latency_ms": 2515,
+      "replayed": 0,
+      "requests": 1
+    },
+    "driver_alive": null,
+    "estimate": {
+      "comparable": {
+        "attempts_without_cost": 0,
+        "attempts_without_usage": 0,
+        "runs": 0,
+        "runs_without_usage": 0,
+        "succeeded": 0,
+        "window": 50
+      },
+      "cost_usd": null,
+      "execution": "cli",
+      "note": "0 comparable runs: indicative only",
+      "playbook": "implement-task",
+      "summary": "estimate (0 comparable runs of implement-task 1.1.0, cli):\n  time    ~15 min (declared expected durations)\n  tokens  unknown: no comparable attempt reported usage\n  cost    unknown: no comparable attempt reported a cost\n  not estimated: implement (no history)\n  note: 0 comparable runs: indicative only",
+      "time": {
+        "basis": "declared",
+        "spread": {
+          "high": 900000,
+          "kind": "single",
+          "low": 900000,
+          "n": 0,
+          "p50": 900000
+        }
+      },
+      "tokens": null,
+      "unestimated": ["implement"],
+      "unestimated_cost": ["implement"],
+      "unestimated_tokens": ["implement"],
+      "version": "1.1.0"
+    },
+    "failure_reason": null,
+    "node_times": {
+      "implement": {
+        "attempt_age_ms": null,
+        "attempt_pid": null,
+        "past_estimate": false,
+        "started_ms": 1793367914245
+      },
+      "start": {
+        "attempt_age_ms": null,
+        "attempt_pid": null,
+        "past_estimate": false,
+        "started_ms": 1793367914230
+      }
+    },
+    "nodes": {
+      "finish": "succeeded",
+      "implement": "succeeded",
+      "start": "succeeded"
+    },
+    "outputs": {
+      "finish": "",
+      "implement": "{\"checks\":\"bun test (before hello.ts): 1 fail\\nnpm test: 1 pass, 0 fail\\nbun test: 1 pass, 0 fail\",\"summary\":\"Added hello.ts exporting hello() returning 'hi' and hello.test.ts with one unit test (written first, failed without hello.ts).\"}",
+      "start": ""
+    },
+    "pending_question": null,
+    "pending_review": null,
+    "pending_supervisor": null,
+    "progress": {
+      "label": null,
+      "pending_question": null,
+      "pending_questions": [],
+      "pending_review": null,
+      "pending_reviews": [],
+      "pending_supervisor": null,
+      "pending_waits": [],
+      "percent": 100,
+      "plan_key": "1.1.0|",
+      "waiting_kind": null,
+      "waiting_on": null
+    },
+    "run_id": "implement-task-1793367914147",
+    "run_status": "succeeded",
+    "superseded_by": null,
+    "usage": {
+      "attempts": 1,
+      "cache_read_tokens": 68687,
+      "cache_write_tokens": 7663,
+      "cost_attempts": 1,
+      "cost_usd": 0.045276699999999996,
+      "finished_attempts": 1,
+      "input_tokens": 8,
+      "output_tokens": 774
+    },
+    "worktree": "/project/work/t1"
+  }
+}

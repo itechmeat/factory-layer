@@ -1,0 +1,11 @@
+{
+  "tool": "supervisor_context_append",
+  "args": {
+    "token": "REDACTED",
+    "note": "capture note: the failure is expected, retry once"
+  },
+  "isError": false,
+  "answer": {
+    "posted_seq": 0
+  }
+}

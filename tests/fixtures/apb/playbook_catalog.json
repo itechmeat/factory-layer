@@ -1,0 +1,112 @@
+{
+  "tool": "playbook_catalog",
+  "args": {},
+  "isError": false,
+  "answer": {
+    "catalog_revision": "sha256:d53e3197f49ec2f3e96c5079f9158d3d7b75958eaab3be0f7ea2b5d8aeb66d83",
+    "diagnostics": [],
+    "dismissed_patterns": [],
+    "entries": [
+      {
+        "ambiguous": false,
+        "effective_effects": ["fs_read", "fs_write", "network", "external"],
+        "lifecycle": "active",
+        "name": "Implement a task",
+        "ref": {
+          "id": "implement-task",
+          "origin": {
+            "kind": "project"
+          },
+          "version": "1.1.0"
+        },
+        "requires": {
+          "commands": ["git", "npm", "bun"],
+          "files": []
+        },
+        "shadowed": false,
+        "trigger": {
+          "avoid_when": ["fixing failing checks of earlier work (use repair)", "resolving a merge conflict (use integrate)"],
+          "examples": ["implement the task in the task file for these owned paths"],
+          "when": ["implement one planned factory task with unit tests in a given working tree"]
+        },
+        "trusted": true
+      },
+      {
+        "ambiguous": false,
+        "effective_effects": ["fs_read", "fs_write", "network", "external"],
+        "lifecycle": "active",
+        "name": "Integrate a conflicting merge",
+        "ref": {
+          "id": "integrate",
+          "origin": {
+            "kind": "project"
+          },
+          "version": "1.4.0"
+        },
+        "requires": {
+          "commands": ["git", "npm", "bun"],
+          "files": []
+        },
+        "shadowed": false,
+        "trigger": {
+          "avoid_when": ["a working tree without a merge in progress"],
+          "examples": ["resolve the conflicts of this merge and commit it"],
+          "when": ["resolve a merge conflict left in a factory working tree and commit the merge"]
+        },
+        "trusted": true
+      },
+      {
+        "ambiguous": false,
+        "effective_effects": ["fs_read", "fs_write", "network", "external"],
+        "lifecycle": "active",
+        "name": "Repair failing checks",
+        "ref": {
+          "id": "repair",
+          "origin": {
+            "kind": "project"
+          },
+          "version": "1.1.0"
+        },
+        "requires": {
+          "commands": ["git", "npm", "bun"],
+          "files": []
+        },
+        "shadowed": false,
+        "trigger": {
+          "avoid_when": ["implementing a task from scratch (use implement-task)", "resolving a merge conflict (use integrate)"],
+          "examples": ["repair these failing tests in the task's working tree"],
+          "when": ["fix given failing checks of a factory task in a given working tree"]
+        },
+        "trusted": true
+      },
+      {
+        "ambiguous": false,
+        "effective_effects": ["fs_read", "fs_write", "network", "external"],
+        "lifecycle": "active",
+        "name": "Scaffold a package",
+        "ref": {
+          "id": "scaffold",
+          "origin": {
+            "kind": "project"
+          },
+          "version": "1.1.0"
+        },
+        "requires": {
+          "commands": ["git", "npm", "bun"],
+          "files": []
+        },
+        "shadowed": false,
+        "trigger": {
+          "avoid_when": ["the working tree already holds a package"],
+          "examples": ["scaffold the package described in the task file"],
+          "when": ["create the package skeleton for a factory spec in a given working tree"]
+        },
+        "trusted": true
+      }
+    ],
+    "profiles_hint": {
+      "count": 6
+    },
+    "suppressed_suggestions": []
+  }
+}

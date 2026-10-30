@@ -1,0 +1,106 @@
+schema: 2
+id: scaffold
+name: Scaffold a package
+description: Creates the skeleton of a small TypeScript package (a CLI or an HTTP API) in the run's working tree, with a unit test setup that runs under both npm test and bun test. The factory passes the working tree at start and commits the result itself.
+version: 1.2.0
+params:
+- name: task_file
+  type: string
+  label: Path of the task description, relative to the working tree
+  options: null
+  default: null
+- name: owned_paths
+  type: string
+  label: Paths this run may create or change, relative to the working tree, one per line
+  options: null
+  default: null
+defaults:
+  profile:
+    name: claude
+    scope: auto
+  max_retries: 1
+  timeout_seconds: null
+  on_failure: stop
+  require_verdict: true
+  max_parallel: 2
+supervisor: null
+trigger:
+  when:
+  - create the package skeleton for a factory spec in a given working tree
+  avoid_when:
+  - the working tree already holds a package
+  examples:
+  - scaffold the package described in the task file
+requires:
+  files: []
+  commands:
+  - git
+  - npm
+  - bun
+effects:
+- fs_read
+- fs_write
+- network
+nodes:
+- id: start
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: start
+- id: scaffold
+  title: Write the package skeleton
+  expected_duration: 10m
+  inputs: null
+  outputs:
+    files: []
+    fields:
+    - summary
+    - checks
+  cache: null
+  type: agent_task
+  prompt: |
+    Read the task description at {{params.task_file}} (relative to your working directory, which is the task's working tree).
+
+    You own only these paths, relative to the working tree:
+    {{params.owned_paths}}
+
+    Create the skeleton of the TypeScript package the task describes, with exactly this module convention (every later task relies on it):
+    1. package.json: `"type": "module"`; exact dependency versions, only `typescript` and `@types/node` as devDependencies unless the task needs more; scripts `"build": "tsc -p tsconfig.json"` and `"test": "tsc -p tsconfig.json && node --test \"dist/test/**/*.test.js\""`; `main` and `bin` point at the compiled files under `dist/src/` (they may name files later tasks create).
+    2. tsconfig.json: `"target": "ES2022"`, `"module": "NodeNext"`, `"moduleResolution": "NodeNext"`, `"strict": true`, `"rootDir": "."`, `"outDir": "dist"`, `"declaration": true`, `"skipLibCheck": true`, `"types": ["node"]`, `"include": ["src", "test"]`.
+    3. bunfig.toml with `[test]` and `root = "test"`, so `bun test` runs the TypeScript tests from source and never the compiled copies.
+    4. The entry point named by the task as a minimal placeholder (no feature code, no stubs of modules other tasks own), and one placeholder test `test/<name>.test.ts` written with `node:test` and `node:assert/strict` that imports the entry point with a `.js` extension (`'../src/index.js'`).
+    5. A .gitignore that keeps node_modules and dist out of git.
+    Create only files you own. Relative imports always end in `.js`.
+
+    Then install the dependencies and run `npm test` and `bun test`; both must pass. Do not commit.
+    Report in the status file: `summary` (what you created, one paragraph) and `checks` (each command you ran and its result, one per line).
+  profile: null
+  max_retries: null
+  timeout_seconds: 1200
+  workdir: null
+  isolation: null
+  connectors: []
+  interactive: false
+- id: finish
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: finish
+  outcome: success
+  prompt: null
+  profile: null
+edges:
+- from: start
+  to: scaffold
+  condition: null
+  fallback: false
+  join: null
+- from: scaffold
+  to: finish
+  condition: null
+  fallback: false
+  join: null

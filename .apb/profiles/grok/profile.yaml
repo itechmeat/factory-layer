@@ -1,0 +1,8 @@
+name: grok
+description: 'TypeScript coding agent of the factory: code and unit tests inside one working tree'
+executor:
+  agent: grok
+  model: grok-4.3
+  fallbacks: []
+soul: any
+skills: []

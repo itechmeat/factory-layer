@@ -1,0 +1,11 @@
+{
+  "tool": "supervisor_node_retry",
+  "args": {
+    "token": "REDACTED",
+    "node": "boom"
+  },
+  "isError": false,
+  "answer": {
+    "posted_seq": 1
+  }
+}

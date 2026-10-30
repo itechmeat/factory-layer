@@ -1,0 +1,89 @@
+{
+  "tool": "run_status",
+  "args": {
+    "run_id": "smoke-wait-1793367703413"
+  },
+  "isError": false,
+  "answer": {
+    "answer": null,
+    "children": [],
+    "continued_from": null,
+    "driver_alive": null,
+    "estimate": {
+      "comparable": {
+        "attempts_without_cost": 0,
+        "attempts_without_usage": 0,
+        "runs": 1,
+        "runs_without_usage": 0,
+        "succeeded": 1,
+        "window": 50
+      },
+      "cost_usd": null,
+      "execution": "cli",
+      "note": "1 comparable run: indicative only",
+      "playbook": "smoke-wait",
+      "summary": "estimate (1 comparable run of smoke-wait 1.0.0, cli):\n  time    ~20 s\n  tokens  unknown: no comparable attempt reported usage\n  cost    unknown: no comparable attempt reported a cost\n  note: 1 comparable run: indicative only",
+      "time": {
+        "basis": "history",
+        "human_wait_p50_ms": 0,
+        "spread": {
+          "high": 20097,
+          "kind": "single",
+          "low": 20097,
+          "n": 1,
+          "p50": 20097
+        }
+      },
+      "tokens": null,
+      "unestimated": [],
+      "unestimated_cost": [],
+      "unestimated_tokens": [],
+      "version": "1.0.0"
+    },
+    "failure_reason": null,
+    "node_times": {
+      "nap": {
+        "attempt_age_ms": null,
+        "attempt_pid": null,
+        "past_estimate": false,
+        "started_ms": 1793367703484
+      },
+      "start": {
+        "attempt_age_ms": null,
+        "attempt_pid": null,
+        "past_estimate": false,
+        "started_ms": 1793367703473
+      }
+    },
+    "nodes": {
+      "done": "succeeded",
+      "nap": "succeeded",
+      "start": "succeeded"
+    },
+    "outputs": {
+      "done": "",
+      "nap": "nap start\nnap end",
+      "start": ""
+    },
+    "pending_question": null,
+    "pending_review": null,
+    "pending_supervisor": null,
+    "progress": {
+      "label": null,
+      "pending_question": null,
+      "pending_questions": [],
+      "pending_review": null,
+      "pending_reviews": [],
+      "pending_supervisor": null,
+      "pending_waits": [],
+      "percent": 100,
+      "plan_key": "1.0.0|",
+      "waiting_kind": null,
+      "waiting_on": null
+    },
+    "run_id": "smoke-wait-1793367703413",
+    "run_status": "succeeded",
+    "superseded_by": null,
+    "worktree": "/project/wtg-b1"
+  }
+}

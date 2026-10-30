@@ -44,15 +44,22 @@ export class McpTimeoutError extends McpStdioError {
   }
 }
 
-/** The server reported a tool failure (an error result or a protocol error). */
+/**
+ * The server reported a tool failure (an error result or a protocol error).
+ * `code` is the server's own refusal code (the JSON-RPC error's `data.code`,
+ * such as `exists` or `invalid_params`), redacted like the message, when the
+ * server sent one.
+ */
 export class McpToolError extends McpStdioError {
   readonly kind = 'tool';
   readonly tool: string;
+  readonly code: string | undefined;
 
-  constructor(tool: string, serverMessage: string) {
+  constructor(tool: string, serverMessage: string, code?: string) {
     super(`MCP tool "${tool}" failed: ${serverMessage}`);
     this.name = 'McpToolError';
     this.tool = tool;
+    this.code = code;
   }
 }
 

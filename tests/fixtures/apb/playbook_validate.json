@@ -1,0 +1,11 @@
+{
+  "tool": "playbook_validate",
+  "args": {
+    "id": "implement-task"
+  },
+  "isError": false,
+  "answer": {
+    "issues": [],
+    "valid": true
+  }
+}

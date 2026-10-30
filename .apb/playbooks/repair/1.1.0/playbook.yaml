@@ -1,0 +1,112 @@
+schema: 2
+id: repair
+name: Repair failing checks
+description: Fixes the given failing checks of a task in the run's working tree, touching only the task's owned paths. The factory passes the working tree at start and commits the result itself.
+version: 1.1.0
+params:
+- name: task_file
+  type: string
+  label: Path of the task description, relative to the working tree
+  options: null
+  default: null
+- name: owned_paths
+  type: string
+  label: Paths this run may create or change, relative to the working tree, one per line
+  options: null
+  default: null
+- name: failing_checks
+  type: string
+  label: The failing checks, one per line, each as the command and the failure it printed
+  options: null
+  default: null
+defaults:
+  profile:
+    name: claude
+    scope: auto
+  max_retries: 1
+  timeout_seconds: null
+  on_failure: stop
+  require_verdict: true
+  max_parallel: 2
+supervisor: null
+trigger:
+  when:
+  - fix given failing checks of a factory task in a given working tree
+  avoid_when:
+  - implementing a task from scratch (use implement-task)
+  - resolving a merge conflict (use integrate)
+  examples:
+  - repair these failing tests in the task's working tree
+requires:
+  files: []
+  commands:
+  - git
+  - npm
+  - bun
+effects:
+- fs_read
+- fs_write
+- network
+nodes:
+- id: start
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: start
+- id: repair
+  title: Fix the failing checks
+  expected_duration: 10m
+  inputs: null
+  outputs:
+    files: []
+    fields:
+    - summary
+    - checks
+  cache: null
+  type: agent_task
+  prompt: |
+    Read the task description at {{params.task_file}} (relative to your working directory, which is the task's working tree).
+
+    You own only these paths, relative to the working tree:
+    {{params.owned_paths}}
+
+    These checks fail:
+    {{params.failing_checks}}
+
+    Fix the cause of each failure:
+    1. Reproduce every failing check first.
+    2. Fix the code, not the check: never weaken, skip or delete a test or an acceptance check to make it pass.
+    3. Change nothing outside the owned paths. If the fix needs that, stop and report it as a failure.
+
+    Then run every listed check again, plus `npm test` and `bun test`; all must pass. Do not commit.
+    Report in the status file: `summary` (the causes and your fixes, one paragraph) and `checks` (each command you ran and its result, one per line).
+  profile: null
+  max_retries: null
+  timeout_seconds: 1200
+  workdir: null
+  isolation: null
+  connectors: []
+  interactive: false
+- id: finish
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: finish
+  outcome: success
+  prompt: null
+  profile: null
+edges:
+- from: start
+  to: repair
+  condition: null
+  fallback: false
+  join: null
+- from: repair
+  to: finish
+  condition: null
+  fallback: false
+  join: null

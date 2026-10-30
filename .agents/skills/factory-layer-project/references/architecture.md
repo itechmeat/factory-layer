@@ -43,8 +43,14 @@ injected through a port.
 2. **APB** through `apb mcp` (stdio), execution mode `cli` only, host
    fallback off. Never changed from here.
 3. **OSB** through its MCP server (stdio), a dedicated vault for the factory.
-4. **Brain model** configuration comes from the environment
-   (`ZAI_API_KEY`, `ZAI_BASE_URL`, `ZAI_MODEL`; see `.env.example`).
+4. **Brain model** configuration comes from the environment (see
+   `.env.example`): Claude through the JigJoy gateway
+   (`JIGJOY_ANTHROPIC_*`) with Z.ai (`ZAI_*`) as the fallback, or Z.ai
+   alone. Never name a gateway key `ANTHROPIC_*`: Claude Code and the
+   Anthropic SDK read those names. Mozaik's `AnthropicMessages` leaves
+   `max_tokens` unset, so the factory sets it on every request.
+5. **Mozaik Cloud** export is opt-in (`FACTORY_MOZAIK_CLOUD=1` plus a key);
+   a key without the opt-in makes the brain refuse to start.
 
 ## Runtime state
 

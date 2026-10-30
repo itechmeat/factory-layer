@@ -2,7 +2,7 @@
 name: factory-layer-project
 description: "Working rules for the factory-layer repository (a software factory: Mozaik brain, APB hands, OSB memory; TypeScript on Bun). Use at the start of ANY task in this repository: orchestration, coding, OpenSpec changes, docs, review. Covers roles, TDD, the three check tiers, the layer rule and ports, coding standards, the OpenSpec flow and the self-improvement protocol: when a rule or a gotcha is learned, this skill is updated in the same change."
 metadata:
-  version: "0.4.1"
+  version: "0.5.8"
   created: "2026-10-30"
 ---
 
@@ -77,13 +77,13 @@ The product design lives in
 14. **Exact versions from the registry.** A new dependency is added with the
     version `npm view <pkg> version` reports at the time, pinned exactly, and
     logged in `docs/versions.md` with the date.
-15. **Sol approves the specs before any code.** Every change's artifacts
-    (proposal, specs, design, tasks) go to a read-only review by Sol (Codex
-    CLI, model `gpt-6.1-sol`) and are revised until Sol answers "Ready to
-    implement: yes"; implementation starts only after that approval.
-    Reviews are saved under `docs/private/reviews/`. Beyond spec approval
-    Sol is an adviser: the orchestrator consults Sol on technical choices
-    and makes the decisions itself.
+15. **Independent reviews, never blocking (owner 2026-10-30, hackathon).**
+    Specs and code are reviewed by a fresh subagent with no orchestrator
+    context (it gets the code, the specs and the rules, not the author's
+    conclusions); its findings are fixed. Sol (Codex `gpt-6.1-sol`) is an
+    optional extra reviewer when its quota allows and never blocks work.
+    Reviews are saved under `docs/private/reviews/`. The orchestrator
+    decides.
 16. **Large commits, each through the full cycle.** Prefer few large
     commits; each passes the full gate and the pre-push review cycle before
     it is offered to the owner for approval.

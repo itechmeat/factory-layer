@@ -1,0 +1,121 @@
+{
+  "tool": "runs_list",
+  "args": {},
+  "isError": false,
+  "answer": [
+    {
+      "playbook": "smoke-wait",
+      "progress": {
+        "label": null,
+        "pending_question": null,
+        "pending_questions": [],
+        "pending_review": null,
+        "pending_reviews": [],
+        "pending_supervisor": null,
+        "pending_waits": [],
+        "percent": 100,
+        "plan_key": "1.0.0|",
+        "waiting_kind": null,
+        "waiting_on": null
+      },
+      "run_id": "smoke-wait-1793367741329",
+      "started_ts": 1793367741349,
+      "status": "succeeded"
+    },
+    {
+      "playbook": "smoke-wait",
+      "progress": {
+        "label": null,
+        "pending_question": null,
+        "pending_questions": [],
+        "pending_review": null,
+        "pending_reviews": [],
+        "pending_supervisor": null,
+        "pending_waits": [],
+        "percent": 100,
+        "plan_key": "1.0.0|",
+        "waiting_kind": null,
+        "waiting_on": null
+      },
+      "run_id": "smoke-wait-1793367741244",
+      "started_ts": 1793367741264,
+      "status": "succeeded"
+    },
+    {
+      "playbook": "smoke-wait",
+      "progress": {
+        "label": null,
+        "pending_question": null,
+        "pending_questions": [],
+        "pending_review": null,
+        "pending_reviews": [],
+        "pending_supervisor": null,
+        "pending_waits": [],
+        "percent": 100,
+        "plan_key": "1.0.0|",
+        "waiting_kind": null,
+        "waiting_on": null
+      },
+      "run_id": "smoke-wait-1793367703501",
+      "started_ts": 1793367703521,
+      "status": "succeeded"
+    },
+    {
+      "playbook": "smoke-wait",
+      "progress": {
+        "label": null,
+        "pending_question": null,
+        "pending_questions": [],
+        "pending_review": null,
+        "pending_reviews": [],
+        "pending_supervisor": null,
+        "pending_waits": [],
+        "percent": 100,
+        "plan_key": "1.0.0|",
+        "waiting_kind": null,
+        "waiting_on": null
+      },
+      "run_id": "smoke-wait-1793367703413",
+      "started_ts": 1793367703433,
+      "status": "succeeded"
+    },
+    {
+      "playbook": "smoke-wait",
+      "progress": {
+        "label": null,
+        "pending_question": null,
+        "pending_questions": [],
+        "pending_review": null,
+        "pending_reviews": [],
+        "pending_supervisor": null,
+        "pending_waits": [],
+        "percent": 100,
+        "plan_key": "1.0.0|",
+        "waiting_kind": null,
+        "waiting_on": null
+      },
+      "run_id": "smoke-wait-1793367664524",
+      "started_ts": 1793367664544,
+      "status": "succeeded"
+    },
+    {
+      "playbook": "smoke-fail",
+      "progress": {
+        "label": null,
+        "pending_question": null,
+        "pending_questions": [],
+        "pending_review": null,
+        "pending_reviews": [],
+        "pending_supervisor": null,
+        "pending_waits": [],
+        "percent": 0,
+        "plan_key": "1.1.0|",
+        "waiting_kind": null,
+        "waiting_on": null
+      },
+      "run_id": "smoke-fail-1793367583063",
+      "started_ts": 1793367583084,
+      "status": "aborted"
+    }
+  ]
+}
