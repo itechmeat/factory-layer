@@ -1,0 +1,10 @@
+name: coder
+description: 'Factory coding agent: writes TypeScript code and unit tests in a given working tree'
+executor:
+  agent: claude
+  model: claude-sonnet-5-5
+  fallbacks:
+  - agent: codex
+    model: gpt-6-sol
+soul: any
+skills: []

@@ -1,0 +1,103 @@
+schema: 2
+id: integrate
+name: Integrate a conflicting merge
+description: Resolves a merge conflict left in the run's working tree so both sides' intent survives, runs the tests and commits the merge. The factory passes the working tree at start.
+version: 1.0.0
+params:
+- name: task_file
+  type: string
+  label: Path of the description of the task being merged, relative to the working tree
+  options: null
+  default: null
+- name: conflict_paths
+  type: string
+  label: Paths with merge conflicts, relative to the working tree, one per line
+  options: null
+  default: null
+defaults:
+  profile:
+    name: coder
+    scope: auto
+  max_retries: 1
+  timeout_seconds: null
+  on_failure: stop
+  require_verdict: true
+  max_parallel: 2
+supervisor: null
+trigger:
+  when:
+  - resolve a merge conflict left in a factory working tree and commit the merge
+  avoid_when:
+  - a working tree without a merge in progress
+  examples:
+  - resolve the conflicts of this merge and commit it
+requires:
+  files: []
+  commands:
+  - git
+  - npm
+  - bun
+effects:
+- fs_read
+- fs_write
+nodes:
+- id: start
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: start
+- id: integrate
+  title: Resolve the conflict and commit the merge
+  expected_duration: 10m
+  inputs: null
+  outputs:
+    files: []
+    fields:
+    - summary
+    - checks
+  cache: null
+  type: agent_task
+  prompt: |
+    Your working directory is a git working tree with a merge in progress. The task being merged is described at {{params.task_file}} (relative to the working tree).
+
+    These paths have conflicts:
+    {{params.conflict_paths}}
+
+    Resolve the merge:
+    1. Read both sides of every conflict (`git diff`, `git log --merge`) and keep the intent of both; never drop one side's behaviour or tests to make the merge clean.
+    2. Change only the conflicted paths, unless the merged code does not compile without a small fix elsewhere; name every such fix in your report.
+    3. Run `npm test` and `bun test`; both must pass.
+    4. Stage the resolved files and finish the merge with `git commit --no-edit`. Do not push.
+
+    If the conflict cannot be resolved without a decision about the product, leave the merge unfinished and report it as a failure.
+    Report in the status file: `summary` (how each conflict was resolved, one paragraph) and `checks` (each command you ran and its result, one per line).
+  profile: null
+  max_retries: null
+  timeout_seconds: 900
+  workdir: null
+  isolation: null
+  connectors: []
+  interactive: false
+- id: finish
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: finish
+  outcome: success
+  prompt: null
+  profile: null
+edges:
+- from: start
+  to: integrate
+  condition: null
+  fallback: false
+  join: null
+- from: integrate
+  to: finish
+  condition: null
+  fallback: false
+  join: null

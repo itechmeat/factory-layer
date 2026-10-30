@@ -1,0 +1,10 @@
+# Git hooks. Only cheap checks run here; the quality gate is
+# `scripts/check.sh` (`bun run check:fast` while working, `bun run check`
+# before delivery). Installed with `bun run hooks:install`.
+pre-commit:
+  commands:
+    format:
+      glob: "*.{ts,js,mjs,cjs,json,jsonc}"
+      exclude:
+        - "openspec/**"
+      run: bunx oxfmt --check {staged_files}

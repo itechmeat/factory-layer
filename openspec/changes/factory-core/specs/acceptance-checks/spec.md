@@ -1,0 +1,75 @@
+# Spec Delta
+
+## Purpose
+
+Running the black-box acceptance checks and the package commands (install,
+build, tests) against a package directory, with bounded time and the output
+kept for the critic and the report.
+
+## ADDED Requirements
+
+### Requirement: Bounded commands
+
+Every command SHALL run in a given directory with a timeout. A command that
+exceeds it SHALL be killed together with its child processes and reported as
+timed out. The result SHALL carry the exit code, the elapsed time, and the
+stdout and stderr, each redacted and truncated to a limit (default 64 KiB)
+with the truncation stated. A command that cannot be spawned SHALL be a
+typed spawn failure in the result, not an exception.
+
+#### Scenario: Hanging command
+
+- **WHEN** a command sleeps longer than its 1 s timeout
+- **THEN** it is reported as timed out after about 1 s and no process of it remains
+
+### Requirement: Package commands
+
+The runner SHALL run install, the build script when present, and the test
+script under each requested runtime (`bun`, `npm` or both), reporting a
+result per runtime. A missing `test` script SHALL be a failed step, not a
+pass.
+
+#### Scenario: One runtime fails
+
+- **WHEN** the tests pass under `bun` and fail under `npm`
+- **THEN** the result reports `bun` passed and `npm` failed with its output
+
+#### Scenario: Missing test script
+
+- **WHEN** the package has no `test` script
+- **THEN** the test step fails with a message saying the script is missing
+
+### Requirement: CLI checks
+
+A CLI check SHALL run the package's CLI entry (the `bin` of `package.json`,
+else `main`) with the given arguments and stdin, and SHALL pass only when
+the exit code, stdout and stderr match the expectations. A failure SHALL
+state each mismatch with expected and actual values.
+
+#### Scenario: Wrong exit code
+
+- **WHEN** a CLI check expects exit code 2 and the CLI exits with 0
+- **THEN** the check fails stating expected 2 and actual 0
+
+### Requirement: HTTP checks
+
+HTTP checks of a package SHALL start its server once per check batch with
+the package's start script on a free port passed in `PORT`, wait for the
+port to accept connections (bounded, default 15 s), run the requests, compare
+status and body, and stop the server and its children afterwards whatever
+the outcome.
+
+#### Scenario: Server never starts
+
+- **WHEN** the server does not listen within the start deadline
+- **THEN** every HTTP check of the batch fails with a start-timeout reason and no server process remains
+
+### Requirement: Check batch result
+
+Running a set of checks SHALL return one result per check (passed, failed
+with reasons, or errored) and SHALL never throw for a failing package.
+
+#### Scenario: Mixed batch
+
+- **WHEN** a batch has one passing and one failing check
+- **THEN** both results are returned with their status and the batch call resolves

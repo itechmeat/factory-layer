@@ -1,0 +1,39 @@
+schema: spec-driven
+
+# Project context: constraints an agent cannot infer by reading the code.
+context: |
+  factory-layer is a software factory. It takes a one-page product spec and
+  autonomously produces a small TypeScript project (a CLI or an HTTP API)
+  whose tests pass. A brain (concurrent Mozaik agents) plans, derives
+  acceptance checks, judges results and chooses recoveries; the hands (APB,
+  reached only through `apb mcp` over stdio) write the code through agent
+  CLIs; the memory (OSB) keeps outcomes of past runs.
+
+  Stack: Bun 1.4.4, TypeScript 7 (strict, no DOM), Zod 4 at every boundary,
+  `@mozaik-ai/core` pinned at exactly 4.2.0 (code only against its published
+  `dist/index.d.ts`), the official MCP TypeScript SDK for stdio clients,
+  oxlint (type-aware), oxfmt, `bun test`, dependency-cruiser, knip,
+  code-ranker. Exact dependency versions only.
+
+  Layers in `src/`, lowest first: domain <- ports <- application <- adapters
+  <- cli. A module imports its own layer or a lower one, never a higher one;
+  type imports count. The application owns orchestration and is the single
+  writer of task state; the brain only returns typed decisions through the
+  `Brain` port; the CLI is the composition root and the only place that picks
+  adapters.
+
+  Conventions: English only; no em-dashes and no exclamation marks in docs
+  and user-facing strings; every module opens with a JSDoc header stating its
+  responsibility; modules stay under 400 lines (700 is a hard limit); every
+  wait has a deadline; usage and cost are measured, estimated or marked
+  unavailable, never invented.
+
+rules:
+  proposal:
+    - Name the layers the change touches and confirm the layer rule holds.
+    - State what is out of scope.
+  design:
+    - Any new port, adapter or external process (MCP server, CLI) names its timeout and failure handling.
+  tasks:
+    - Order tasks test first (TDD) for every unit of behaviour.
+    - End with the full gate (`bun run check`) and code-ranker clean.

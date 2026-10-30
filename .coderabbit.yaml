@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://storage.googleapis.com/coderabbit_public_assets/schema.v2.json
+# CodeRabbit reviews code only: sources, tests, scripts, configs, the APB
+# project files and the workflows. Agent instructions, skills, OpenSpec
+# artifacts and prose documentation are out of scope.
+language: en-US
+reviews:
+  profile: chill
+  poem: false
+  in_progress_fortune: false
+  sequence_diagrams: false
+  path_filters:
+    - '!.agents/**'
+    - '!.claude/**'
+    - '!openspec/**'
+    - '!docs/**'
+    - '!**/*.md'
+    - '!bun.lock'
+  auto_review:
+    enabled: true
+    drafts: false
+chat:
+  auto_reply: true

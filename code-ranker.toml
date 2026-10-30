@@ -1,0 +1,19 @@
+# code-ranker config for factory-layer: a structural lint (dependency cycles,
+# coupling, cohesion, complexity) that `scripts/check.sh` runs in its full
+# tier. Only the TypeScript plugin runs; build output, dependencies and tool
+# directories are never source.
+version = "5.0"
+
+[plugins]
+enabled = ["ts"]
+
+[plugins.ts.ignore]
+paths = [
+  "node_modules/**",
+  "dist/**",
+  "coverage/**",
+  "work/**",
+  "runs/**",
+  "out/**",
+  ".code-ranker/**",
+]

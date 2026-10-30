@@ -1,0 +1,10 @@
+# Bun's configuration for the runs of `scripts/check.sh` that must not
+# report coverage: the selected unit tests of the `fast` tier and the
+# integration tests of the `full` tier.
+#
+# It is `bunfig.toml` without coverage: a run over a selection of tests, or
+# over the integration smokes, would report the coverage of that subset, not
+# of the repository. Coverage is reported by the all-unit-tests run of the
+# `standard` and `full` tiers.
+[test]
+coverage = false

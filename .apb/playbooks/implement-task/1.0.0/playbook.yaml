@@ -1,0 +1,103 @@
+schema: 2
+id: implement-task
+name: Implement a task
+description: Writes the code and unit tests of one planned task in the run's working tree, touching only the task's owned paths. The factory passes the working tree at start and commits the result itself.
+version: 1.0.0
+params:
+- name: task_file
+  type: string
+  label: Path of the task description, relative to the working tree
+  options: null
+  default: null
+- name: owned_paths
+  type: string
+  label: Paths this run may create or change, relative to the working tree, one per line
+  options: null
+  default: null
+defaults:
+  profile:
+    name: coder
+    scope: auto
+  max_retries: 1
+  timeout_seconds: null
+  on_failure: stop
+  require_verdict: true
+  max_parallel: 2
+supervisor: null
+trigger:
+  when:
+  - implement one planned factory task with unit tests in a given working tree
+  avoid_when:
+  - fixing failing checks of earlier work (use repair)
+  - resolving a merge conflict (use integrate)
+  examples:
+  - implement the task in the task file for these owned paths
+requires:
+  files: []
+  commands:
+  - git
+  - npm
+  - bun
+effects:
+- fs_read
+- fs_write
+nodes:
+- id: start
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: start
+- id: implement
+  title: Write the code and its unit tests
+  expected_duration: 15m
+  inputs: null
+  outputs:
+    files: []
+    fields:
+    - summary
+    - checks
+  cache: null
+  type: agent_task
+  prompt: |
+    Read the task description at {{params.task_file}} (relative to your working directory, which is the task's working tree).
+
+    You own only these paths, relative to the working tree:
+    {{params.owned_paths}}
+
+    Implement the task:
+    1. Write a failing unit test for each behaviour the task asks for, then the code that makes it pass.
+    2. Change nothing outside the owned paths. If the task cannot be done without that, stop and report it as a failure.
+    3. Keep the tests runnable under both `npm test` and `bun test`.
+
+    Then run `npm test` and `bun test` and any further check the task names; all must pass. Do not commit.
+    Report in the status file: `summary` (what you changed, one paragraph) and `checks` (each command you ran and its result, one per line).
+  profile: null
+  max_retries: null
+  timeout_seconds: 1800
+  workdir: null
+  isolation: null
+  connectors: []
+  interactive: false
+- id: finish
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: finish
+  outcome: success
+  prompt: null
+  profile: null
+edges:
+- from: start
+  to: implement
+  condition: null
+  fallback: false
+  join: null
+- from: implement
+  to: finish
+  condition: null
+  fallback: false
+  join: null

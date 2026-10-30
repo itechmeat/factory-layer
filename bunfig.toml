@@ -1,0 +1,20 @@
+# Bun's own configuration. Only the test runner is configured here; the
+# package manager takes its defaults (`bun.lock`, exact versions in
+# `package.json`).
+
+[install]
+# Exact versions only: `bun add <pkg>` writes `1.2.3`, never `^1.2.3`.
+exact = true
+
+[test]
+# `bun test` owns `src/`, `scripts/` and the offline helpers of the
+# integration smokes in `tests/integration/support/` (the `test` script names
+# all three).
+# Coverage is reported on every run so gaps are visible, but there is no
+# floor: end-to-end runs are the main gate, and unit tests cover only the
+# failure paths an end-to-end run cannot reproduce (see the project skill's
+# coding standards).
+coverage = true
+coverageReporter = ["text", "lcov"]
+coverageSkipTestFiles = true
+coveragePathIgnorePatterns = ["scripts/**", "src/**/testing/**"]

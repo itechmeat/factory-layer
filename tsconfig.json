@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    // Bun runs the TypeScript directly and `bun build` bundles the CLI, so
+    // the checker never emits. ES2023 is what current Bun and Node both run
+    // natively, so nothing is down-levelled behind the checker's back.
+    "target": "ES2023",
+    // `preserve` with `moduleResolution: bundler` is the pairing Bun's docs
+    // recommend for code Bun runs or bundles.
+    "module": "preserve",
+    "moduleResolution": "Bundler",
+    "moduleDetection": "force",
+    "noEmit": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    // Spelled out because this file is the repository's statement of policy.
+    "strict": true,
+    "types": ["bun"],
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    // No enums, namespaces or parameter properties: every `.ts` file survives
+    // a plain type-strip (Bun, Node, oxc) without a compiler.
+    "erasableSyntaxOnly": true,
+    "noImplicitOverride": true,
+    // An index signature is a claim about shape, not about a key existing.
+    "noPropertyAccessFromIndexSignature": true,
+    // `{ a?: string }` and `{ a: string | undefined }` are different types.
+    "exactOptionalPropertyTypes": true,
+    // Every `a[i]` and `record[key]` yields `T | undefined`: an index derived
+    // from wire data is a guess until it is checked.
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    // Server-side only: Bun and Node, no DOM.
+    "lib": ["ESNext"]
+  },
+  // `scripts` and `tests` are checked with the same flags as `src`, so the
+  // gate's own code and the integration suite are held to the same policy.
+  "include": ["src", "scripts", "tests"]
+}

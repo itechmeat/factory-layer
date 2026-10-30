@@ -1,0 +1,61 @@
+{
+  // Type-aware linting is a CLI flag (`--type-aware`, carried by the `lint`
+  // script), not a config key. The engine is `oxlint-tsgolint`, versioned
+  // against the Go TypeScript compiler (`oxlint-tsgolint` 7.0.x <-> typescript 7.0.x).
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "pedantic": "warn"
+  },
+  "ignorePatterns": ["dist/**", "coverage/**", "work/**", "runs/**", "out/**"],
+  "options": {
+    "reportUnusedDisableDirectives": "error"
+  },
+  // Every entry here is a rule this repository has decided against, with the
+  // reason. Inline `oxlint-disable` comments are not used: a policy belongs in
+  // one file, not scattered through the code.
+  "rules": {
+    // False positive from Bun's test typings: `expect(p).rejects` matchers are
+    // typed `void` but return a promise that must be awaited.
+    "typescript/await-thenable": "off",
+    // Would demand `readonly` on every parameter; readonly data is expressed
+    // in the types that need it instead.
+    "typescript/prefer-readonly-parameter-types": "off",
+    // Short invariants sit at the end of the line they constrain.
+    "eslint/no-inline-comments": "off",
+    // Module size is gated by `scripts/size-check.ts` and complexity by
+    // code-ranker; a flat line count here would only duplicate them.
+    "eslint/max-lines": "off",
+    "eslint/max-lines-per-function": "off",
+    "eslint/max-classes-per-file": "off",
+    // Truthiness on strings and numbers is used deliberately; an explicit
+    // comparison at every use adds noise, not safety.
+    "typescript/strict-boolean-expressions": "off",
+    // `onEvent: () => this.close()` is the handler idiom here.
+    "typescript/no-confusing-void-expression": "off",
+    "typescript/strict-void-return": "off",
+    // With `exactOptionalPropertyTypes` an explicit `undefined` is meaningful.
+    "unicorn/no-useless-undefined": "off",
+    // A named function inside a factory closes over the factory's arguments.
+    "unicorn/consistent-function-scoping": "off",
+    // `async` can be part of a contract (a port method returns a promise
+    // whether or not a given implementation awaits).
+    "eslint/require-await": "off",
+    "typescript/require-await": "off",
+    // A discriminated dispatch whose default case returns `undefined` on purpose.
+    "typescript/consistent-return": "off",
+    // Contradicts `unicorn/no-array-callback-reference`, which is on.
+    "unicorn/prefer-native-coercion-functions": "off",
+    // `describe(...)` inside a `for` over a table of cases is a parameterised suite.
+    "eslint/no-loop-func": "off",
+    // The CLI entry sets `process.exitCode` from `main()` behind
+    // `import.meta.main`; top-level await would buy nothing there.
+    "unicorn/prefer-top-level-await": "off",
+    // A generic parameter used once lets the CALLER choose the type.
+    "typescript/no-unnecessary-type-parameters": "off",
+    // Every regex is an ASCII validator over ids, paths and names; `u` mode
+    // changes escape semantics for no gain there.
+    "eslint/require-unicode-regexp": "off"
+  }
+}
