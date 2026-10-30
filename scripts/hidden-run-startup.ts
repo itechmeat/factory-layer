@@ -2,8 +2,9 @@
  * The startup check of the hidden run: exactly the committable files of one
  * delivery are copied into a scratch directory, installed without lifecycle
  * scripts in the Node-only environment (no bun on the PATH), every declared
- * bin is started with `node <bin> --help` (a module or syntax error, or a
- * nonzero exit with an uncaught exception, fails it), and a package with a start
+ * bin is started with `node <bin> --help` and stdin closed (a module or syntax error, or a
+ * nonzero exit with an uncaught exception, fails it; a bin the start script
+ * launches is a server and is left to the server check), and a package with a start
  * script is started on a free port until it accepts a TCP connection, on
  * both loopback stacks (macOS resolves localhost to ::1). Invariant: every
  * wait is bounded by the caller's deadline (10 s per bin, 15 s for the
@@ -13,7 +14,7 @@
 import { cpSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { connect, createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve as resolvePath } from 'node:path';
 
 import { runCommand } from '../src/adapters/check-runner/process';
 import { withScratchHome } from '../src/adapters/child-env';
@@ -53,6 +54,35 @@ export function commonDirOf(files: readonly string[]): string {
 export function binsOf(manifest: PackageManifestType): readonly string[] {
   if (typeof manifest.bin === 'string') return [manifest.bin];
   return Object.values(manifest.bin ?? {});
+}
+
+/**
+ * True when the start script launches `bin`: a token of the script resolves
+ * to the bin's path, or the script runs the package directory (`node .`) and
+ * `main` resolves to it. Such a bin is a server; `--help` would start it.
+ */
+export function launchedByStart(bin: string, manifest: PackageManifestType, packageDir: string): boolean {
+  const start = manifest.scripts?.['start'];
+  if (start === undefined) return false;
+  const target = resolvePath(packageDir, bin);
+  const scripts = nodeScripts(start.split(/\s+/).filter((token) => token !== ''));
+  if (scripts.some((script) => resolvePath(packageDir, script) === target)) return true;
+  return (
+    manifest.main !== undefined &&
+    resolvePath(packageDir, manifest.main) === target &&
+    scripts.some((script) => resolvePath(packageDir, script) === resolvePath(packageDir))
+  );
+}
+
+/** The script operand of every `node` command in a start script: the first non-flag token after `node`. */
+function nodeScripts(tokens: readonly string[]): string[] {
+  const scripts: string[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (tokens[index] !== 'node') continue;
+    const operand = tokens.slice(index + 1).find((token) => !token.startsWith('-'));
+    if (operand !== undefined) scripts.push(operand);
+  }
+  return scripts;
 }
 
 /** A free TCP port on the loopback, taken from a listener on port 0 and closed. */
@@ -122,7 +152,7 @@ async function checkBin(bin: string, packageDir: string, env: Readonly<Record<st
     timeoutMs: boundMs,
     env,
     secrets: [],
-    stdin: '',
+    ignoreStdin: true,
   });
   const output = `${outcome.stdout}\n${outcome.stderr}`;
   const marker = markerIn(output);
@@ -169,7 +199,7 @@ async function startServer(packageDir: string, home: string, port: number, bound
 }
 
 /**
- * Copy of exactly `files` into a temp dir, `npm install --ignore-scripts`, then each bin as `node <bin> --help` (stdin empty, 10 s) and, with scripts.start, `npm run start` on a free PORT until a TCP connection is accepted (15 s); the server group is then killed. The whole check is bounded by `deadlineMs`.
+ * Copy of exactly `files` into a temp dir, `npm install --ignore-scripts`, then each bin as `node <bin> --help` (stdin closed, 10 s; a bin the start script launches is skipped) and, with scripts.start, `npm run start` on a free PORT until a TCP connection is accepted (15 s); the server group is then killed. The whole check is bounded by `deadlineMs`.
  */
 export async function startupCheck(repoRoot: string, files: readonly string[], deadlineMs: number): Promise<StepOutcome> {
   if (files.length === 0) return { ok: false, detail: 'no committable files' };
@@ -197,6 +227,10 @@ export async function startupCheck(repoRoot: string, files: readonly string[], d
       if (install.exitCode !== 0 || install.timedOut) return { ok: false, detail: failedDetail('npm install', install) };
       const parts: string[] = [];
       for (const bin of binsOf(manifest.manifest)) {
+        if (launchedByStart(bin, manifest.manifest, packageDir)) {
+          parts.push('server bin, covered by start');
+          continue;
+        }
         const outcome = await checkBin(bin, packageDir, env, Math.min(BIN_TIMEOUT_MS, deadlineMs - Date.now()));
         if (!outcome.ok) return outcome;
         parts.push(outcome.detail);

@@ -67,10 +67,11 @@ export const INSTALL_TIMEOUT_MS = 10 * 60_000;
 export const BUILD_TIMEOUT_MS = 5 * 60_000;
 
 /**
- * The parts of a delivery's package.json the hidden run reads: the bins and
- * the scripts. Zod at the boundary: the package is model-written code.
+ * The parts of a delivery's package.json the hidden run reads: the bins, the
+ * main file and the scripts. Zod at the boundary: the package is model-written code.
  */
 const PackageManifest = z.looseObject({
+  main: z.string().optional(),
   bin: z.union([z.string(), z.record(z.string(), z.string())]).optional(),
   scripts: z.record(z.string(), z.string()).optional(),
 });
