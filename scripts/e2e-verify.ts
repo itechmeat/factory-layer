@@ -20,6 +20,7 @@ import { z } from 'zod';
 
 import { generatedCodeEnv, withScratchHome } from '../src/adapters/child-env';
 import { nodeOnlyEnv } from '../src/adapters/node-only-env';
+import { bashCommand } from '../src/adapters/shell';
 import { commandNameOf, compareExample, toNodeCommand, type SpecExample } from './e2e-examples';
 import { runBeforeDeadline, tail, type Deadline } from './e2e-process';
 
@@ -197,7 +198,7 @@ export async function runExamples(
     for (const example of examples) {
       const shell = toNodeCommand(example.command, commandName, bin);
       const run = await runBeforeDeadline(
-        { command: 'bash', args: ['-c', shell], cwd: dir, timeoutMs: EXAMPLE_TIMEOUT_MS, env: stepEnv(home, 'npm') },
+        { command: bashCommand(), args: ['-c', shell], cwd: dir, timeoutMs: EXAMPLE_TIMEOUT_MS, env: stepEnv(home, 'npm') },
         deadline,
       );
       results.push({ command: example.command, mismatch: compareExample(example, commandName, run) });

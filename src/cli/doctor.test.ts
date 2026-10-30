@@ -41,3 +41,15 @@ test('a failing and a hanging check fail with their fix, the rest pass, and doct
   expect(aborted).toBe(true);
   expect(lines.at(-1)).toBe('doctor: 2 of 3 checks failed');
 });
+
+test('a warning prints as warn, keeps the exit code 0 and is counted', async () => {
+  const checks: DoctorCheck[] = [
+    { name: 'git', deadlineMs: 1000, fix: 'install git', run: async () => 'git version 2' },
+    { name: 'bash', deadlineMs: 1000, fix: 'install bash', run: async () => ({ warning: '/bin/bash is bash 3; brew install bash' }) },
+  ];
+  const lines: string[] = [];
+  expect(await runDoctor(checks, (line) => lines.push(line))).toBe(0);
+  expect(lines[1]).toStartWith('warn bash');
+  expect(lines[1]).toContain('brew install bash');
+  expect(lines.at(-1)).toBe('doctor: no check failed, 1 warning');
+});

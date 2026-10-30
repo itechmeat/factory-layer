@@ -6,13 +6,14 @@
  * approved at their current versions and their default profile at its
  * current bundle (see `doctor-apb.ts`), Claude Code installed and logged in
  * (the default agent profile), the factory's OSB vault configured and
- * answering a handshake, and `git`, `bun` and `npm` on the PATH. Every MCP
+ * answering a handshake, the `bash` that runs command checks (its path and major version; 3.x is a warning), `node` starting inside the generated-code environment (scratch HOME, Node-only PATH), and `git`, `bun` and `npm` on the PATH. Every MCP
  * check runs under its abort signal, so a check past its deadline closes
  * its client and the server process ends. Every answer read from a tool is
  * validated with Zod; no secret value is ever printed.
  */
 
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 import { z } from 'zod';
 
@@ -21,10 +22,13 @@ import { parseBrainConfig } from '../adapters/brain-mozaik/config';
 import { createMozaikDecider } from '../adapters/brain-mozaik/decider';
 import { apbMcpCommand } from '../adapters/hands-apb/apb-command';
 import { STARTER_PARAMS } from '../adapters/hands-apb/start-inputs';
+import { withScratchHome } from '../adapters/child-env';
 import { systemClock } from '../adapters/index';
+import { nodeOnlyEnv } from '../adapters/node-only-env';
 import type { McpServerCommand } from '../adapters/mcp-stdio/client';
 import type { Env } from './compose';
-import type { DoctorCheck } from './doctor';
+import { bashCommand, bashMajorVersion } from '../adapters/shell';
+import type { DoctorCheck, DoctorWarning } from './doctor';
 import { starterApproval, withServer } from './doctor-apb';
 
 const SPAWN_CHECK_MS = 15_000;
@@ -63,6 +67,34 @@ const Ping = z.object({ ok: z.boolean() });
 
 function tool(name: string, fix: string): DoctorCheck {
   return { name, deadlineMs: SPAWN_CHECK_MS, fix, run: (signal) => output([name, '--version'], signal) };
+}
+
+/** The shell command checks run under: its path and major version, a warning below bash 4. */
+export async function bashReport(shell: string, signal: AbortSignal): Promise<string | DoctorWarning> {
+  const path = Bun.which(shell);
+  if (path === null) throw new Error('bash is not on the PATH');
+  const major = bashMajorVersion(await output([path, '--version'], signal));
+  if (major === null) throw new Error(`${path} did not report a bash version`);
+  if (major < 4) return { warning: `${path} is bash ${String(major)}, older than 4; install a newer one with: brew install bash` };
+  return `${path} (bash ${String(major)})`;
+}
+
+/**
+ * Runs `node --version` as generated code would see it: the scratch HOME and
+ * the Node-only tool directory. Rejects with a hint when node does not start
+ * (a version-manager shim that needs the operator's HOME is the usual cause).
+ */
+export async function nodeStartReport(signal: AbortSignal): Promise<string> {
+  return withScratchHome(async (home) => {
+    const env = nodeOnlyEnv(home);
+    const node = join(env['PATH'] ?? '', 'node');
+    const child = Bun.spawn([node, '--version'], { env, cwd: home, stdout: 'pipe', stderr: 'pipe', stdin: 'ignore', signal });
+    const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+    if (code !== 0) {
+      throw new Error(`node did not start in the generated-code environment (exit ${String(code)}): ${stderr.trim().slice(0, 200)}`);
+    }
+    return `${stdout.trim()} (${node})`;
+  });
 }
 
 /** Every doctor check for the factory rooted at `root`. */
@@ -142,6 +174,18 @@ export function doctorChecks(root: string, env: Env): readonly DoctorCheck[] {
         const tools = await withServer(server, budget(signal), (client) => client.listTools());
         return `o2b mcp answered with ${String(tools.length)} tools`;
       },
+    },
+    {
+      name: 'bash',
+      deadlineMs: SPAWN_CHECK_MS,
+      fix: 'install bash and put it on the PATH (on macOS: brew install bash)',
+      run: (signal) => bashReport(bashCommand(), signal),
+    },
+    {
+      name: 'node (generated code)',
+      deadlineMs: SPAWN_CHECK_MS,
+      fix: 'put a real node first on the PATH: a shim that reads $HOME (nvm, asdf) cannot start under the scratch HOME of generated code; install node with Homebrew or point PATH at the real bin directory',
+      run: nodeStartReport,
     },
     tool('git', 'install git'),
     tool('bun', 'install bun'),

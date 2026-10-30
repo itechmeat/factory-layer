@@ -21,6 +21,7 @@ import type { CheckResult, CliCheck, CommandCheck, ExpectedText } from '../../do
 import type { CommandOutcome } from '../../ports/check-runner';
 import type { ChildEnv } from '../child-env';
 import { nodeOnlyEnv } from '../node-only-env';
+import { bashCommand } from '../shell';
 import type { PackageJson } from './package-json';
 import { readPackageJson } from './package-json';
 import { redactAndCap } from './output';
@@ -175,7 +176,7 @@ export async function runCommandCheck(dir: string, check: CommandCheck, batch: B
   const { outcome, skipped } = await withPackageBins(dir, batch, async (bins) => ({
     skipped: bins.skipped,
     outcome: await runCommand({
-      command: 'bash',
+      command: bashCommand(),
       args: ['-c', check.command],
       cwd: dir,
       timeoutMs: check.timeoutMs,
