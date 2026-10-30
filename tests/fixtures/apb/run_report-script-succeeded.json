@@ -1,0 +1,63 @@
+{
+  "tool": "run_report",
+  "args": {
+    "run_id": "smoke-wait-1793367703413"
+  },
+  "isError": false,
+  "answer": {
+    "answer": null,
+    "duration_table": [
+      {
+        "expected_seconds": 0,
+        "kind": "start",
+        "measured_seconds": 0,
+        "node": "start"
+      },
+      {
+        "expected_seconds": 20,
+        "kind": "script",
+        "measured_seconds": 20,
+        "node": "nap"
+      },
+      {
+        "expected_seconds": 0,
+        "kind": "finish",
+        "measured_seconds": null,
+        "node": "done"
+      }
+    ],
+    "nodes": {
+      "done": "succeeded",
+      "nap": "succeeded",
+      "start": "succeeded"
+    },
+    "outcome": {
+      "done": ["succeeded: nap"],
+      "findings": [],
+      "headline": "Run succeeded; nothing checked by the engine",
+      "unverified": [],
+      "verified": [],
+      "warnings": []
+    },
+    "outputs": {
+      "done": "",
+      "nap": "nap start\nnap end",
+      "start": ""
+    },
+    "progress": {
+      "label": null,
+      "pending_question": null,
+      "pending_questions": [],
+      "pending_review": null,
+      "pending_reviews": [],
+      "pending_supervisor": null,
+      "pending_waits": [],
+      "percent": 100,
+      "plan_key": "1.0.0|",
+      "waiting_kind": null,
+      "waiting_on": null
+    },
+    "run_id": "smoke-wait-1793367703413",
+    "run_status": "succeeded"
+  }
+}

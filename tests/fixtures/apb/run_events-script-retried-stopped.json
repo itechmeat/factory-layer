@@ -1,0 +1,138 @@
+{
+  "tool": "run_events",
+  "args": {
+    "run_id": "smoke-fail-1793367583063"
+  },
+  "isError": false,
+  "answer": {
+    "events": [
+      {
+        "playbook": "smoke-fail",
+        "seq": 0,
+        "ts": 1793367583084,
+        "type": "run_started",
+        "version": "1.1.0"
+      },
+      {
+        "digest": "sha256:ed77f2df76c814c82989cacd9bd44db07bc651e2f65b178c9ccd8aa01af11c20",
+        "execution_root": "/project",
+        "origin": "project",
+        "seq": 1,
+        "ts": 1793367583084,
+        "type": "run_provenance"
+      },
+      {
+        "path": "/project/wt-a",
+        "seq": 2,
+        "source": "caller",
+        "ts": 1793367583089,
+        "type": "worktree_resolved"
+      },
+      {
+        "attempt": 1,
+        "node": "start",
+        "seq": 3,
+        "ts": 1793367583122,
+        "type": "node_started"
+      },
+      {
+        "artifacts": [],
+        "attempt": 1,
+        "node": "start",
+        "output": "",
+        "seq": 4,
+        "status": "succeeded",
+        "ts": 1793367583122,
+        "type": "node_finished"
+      },
+      {
+        "from": "start",
+        "seq": 5,
+        "to": "boom",
+        "ts": 1793367583133,
+        "type": "edge_traversed",
+        "uncounted": true
+      },
+      {
+        "attempt": 1,
+        "node": "boom",
+        "seq": 6,
+        "ts": 1793367583133,
+        "type": "node_started"
+      },
+      {
+        "artifacts": [],
+        "attempt": 1,
+        "node": "boom",
+        "output": "smoke-fail: about to exit 1",
+        "seq": 7,
+        "status": "failed",
+        "ts": 1793367583192,
+        "type": "node_finished"
+      },
+      {
+        "detail": "smoke-fail: about to exit 1",
+        "node": "boom",
+        "seq": 8,
+        "trigger": "node_failed",
+        "ts": 1793367583202,
+        "type": "wake_raised"
+      },
+      {
+        "action": "context_append",
+        "detail": "capture note: the failure is expected, retry once",
+        "node": null,
+        "seq": 9,
+        "ts": 1793367588459,
+        "type": "supervisor_action"
+      },
+      {
+        "action": "node_retry",
+        "detail": "",
+        "node": "boom",
+        "seq": 10,
+        "ts": 1793367588469,
+        "type": "supervisor_action"
+      },
+      {
+        "from_node": "boom",
+        "nodes": ["boom", "done"],
+        "seq": 11,
+        "ts": 1793367588474,
+        "type": "nodes_revived"
+      },
+      {
+        "attempt": 1,
+        "node": "boom",
+        "seq": 12,
+        "ts": 1793367588474,
+        "type": "node_started"
+      },
+      {
+        "artifacts": [],
+        "attempt": 1,
+        "node": "boom",
+        "output": "smoke-fail: about to exit 1",
+        "seq": 13,
+        "status": "failed",
+        "ts": 1793367588534,
+        "type": "node_finished"
+      },
+      {
+        "detail": "smoke-fail: about to exit 1",
+        "node": "boom",
+        "seq": 14,
+        "trigger": "node_failed",
+        "ts": 1793367588539,
+        "type": "wake_raised"
+      },
+      {
+        "by": "operator",
+        "reason": "stop requested",
+        "seq": 15,
+        "ts": 1793367588689,
+        "type": "run_aborted"
+      }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+name: opencode
+description: 'TypeScript coding agent of the factory: code and unit tests inside one working tree'
+executor:
+  agent: opencode
+  model: opencode/glm-5.3-flash-free
+  fallbacks: []
+soul: any
+skills: []

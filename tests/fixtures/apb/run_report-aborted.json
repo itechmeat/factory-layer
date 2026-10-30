@@ -1,0 +1,61 @@
+{
+  "tool": "run_report",
+  "args": {
+    "run_id": "smoke-fail-1793367583063"
+  },
+  "isError": false,
+  "answer": {
+    "answer": null,
+    "duration_table": [
+      {
+        "expected_seconds": 0,
+        "kind": "start",
+        "measured_seconds": 0,
+        "node": "start"
+      },
+      {
+        "expected_seconds": 5,
+        "kind": "script",
+        "measured_seconds": 0,
+        "node": "boom"
+      },
+      {
+        "expected_seconds": 0,
+        "kind": "finish",
+        "measured_seconds": null,
+        "node": "done"
+      }
+    ],
+    "nodes": {
+      "boom": "failed",
+      "start": "succeeded"
+    },
+    "outcome": {
+      "done": [],
+      "findings": [],
+      "headline": "Run aborted; nothing checked by the engine",
+      "unverified": [],
+      "verified": [],
+      "warnings": []
+    },
+    "outputs": {
+      "boom": "smoke-fail: about to exit 1",
+      "start": ""
+    },
+    "progress": {
+      "label": null,
+      "pending_question": null,
+      "pending_questions": [],
+      "pending_review": null,
+      "pending_reviews": [],
+      "pending_supervisor": null,
+      "pending_waits": [],
+      "percent": 0,
+      "plan_key": "1.1.0|",
+      "waiting_kind": null,
+      "waiting_on": null
+    },
+    "run_id": "smoke-fail-1793367583063",
+    "run_status": "aborted"
+  }
+}

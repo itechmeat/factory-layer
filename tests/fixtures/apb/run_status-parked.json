@@ -1,0 +1,98 @@
+{
+  "tool": "run_status",
+  "args": {
+    "run_id": "smoke-fail-1793367583063"
+  },
+  "isError": false,
+  "answer": {
+    "answer": null,
+    "children": [],
+    "continued_from": null,
+    "driver_alive": true,
+    "estimate": {
+      "comparable": {
+        "attempts_without_cost": 0,
+        "attempts_without_usage": 0,
+        "runs": 0,
+        "runs_without_usage": 0,
+        "succeeded": 0,
+        "window": 50
+      },
+      "cost_usd": null,
+      "execution": "cli",
+      "note": "0 comparable runs: indicative only",
+      "playbook": "smoke-fail",
+      "summary": "estimate (0 comparable runs of smoke-fail 1.1.0, cli):\n  time    ~5 s (declared expected durations)\n  tokens  unknown: no comparable attempt reported usage\n  cost    unknown: no comparable attempt reported a cost\n  note: 0 comparable runs: indicative only",
+      "time": {
+        "basis": "declared",
+        "spread": {
+          "high": 5000,
+          "kind": "single",
+          "low": 5000,
+          "n": 0,
+          "p50": 5000
+        }
+      },
+      "tokens": null,
+      "unestimated": [],
+      "unestimated_cost": [],
+      "unestimated_tokens": [],
+      "version": "1.1.0"
+    },
+    "failure_reason": null,
+    "node_times": {
+      "boom": {
+        "attempt_age_ms": null,
+        "attempt_pid": null,
+        "past_estimate": false,
+        "started_ms": 1793367583133
+      },
+      "start": {
+        "attempt_age_ms": null,
+        "attempt_pid": null,
+        "past_estimate": false,
+        "started_ms": 1793367583122
+      }
+    },
+    "nodes": {
+      "boom": "failed",
+      "start": "succeeded"
+    },
+    "outputs": {
+      "boom": "smoke-fail: about to exit 1",
+      "start": ""
+    },
+    "pending_question": null,
+    "pending_review": null,
+    "pending_supervisor": {
+      "how_to_decide": "To decide, use the supervisor tools: node_retry (re-run node `boom`), run_continue_from (advance from a chosen node), or run_abort.",
+      "instruction": "The supervised run is waiting for a supervisor decision after node `boom` failed. Available options: retry, continue_from, abort. To decide, use the supervisor tools: node_retry (re-run node `boom`), run_continue_from (advance from a chosen node), or run_abort.",
+      "node": "boom",
+      "options": ["retry", "continue_from", "abort"],
+      "trigger": "node_failed"
+    },
+    "progress": {
+      "label": null,
+      "pending_question": null,
+      "pending_questions": [],
+      "pending_review": null,
+      "pending_reviews": [],
+      "pending_supervisor": {
+        "how_to_decide": "To decide, use the supervisor tools: node_retry (re-run node `boom`), run_continue_from (advance from a chosen node), or run_abort.",
+        "instruction": "The supervised run is waiting for a supervisor decision after node `boom` failed. Available options: retry, continue_from, abort. To decide, use the supervisor tools: node_retry (re-run node `boom`), run_continue_from (advance from a chosen node), or run_abort.",
+        "node": "boom",
+        "options": ["retry", "continue_from", "abort"],
+        "trigger": "node_failed"
+      },
+      "pending_waits": [],
+      "percent": 0,
+      "plan_key": "1.1.0|",
+      "waiting_kind": "supervisor",
+      "waiting_on": "boom"
+    },
+    "run_id": "smoke-fail-1793367583063",
+    "run_status": "running",
+    "superseded_by": null,
+    "worktree": "/project/wt-a"
+  }
+}

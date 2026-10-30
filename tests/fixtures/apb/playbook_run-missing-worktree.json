@@ -1,0 +1,10 @@
+{
+  "tool": "playbook_run",
+  "args": {
+    "id": "smoke-fail",
+    "supervise": "self",
+    "worktree": "/project/wt-a"
+  },
+  "isError": true,
+  "answer": "engine error: invalid: the run worktree `/project/wt-a` (passed at start) is not an existing directory"
+}

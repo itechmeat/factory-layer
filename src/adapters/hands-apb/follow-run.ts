@@ -39,6 +39,8 @@ export interface FollowRunRequest {
   readonly worktree: string;
   /** Counted from the start call; the run is stopped when it passes. */
   readonly runLimitMs: number;
+  /** The playbook's params, as strings; omitted for a playbook without params. */
+  readonly params?: Readonly<Record<string, string>>;
   readonly cleanupBudgetMs?: number;
   readonly waitSliceMs?: number;
   readonly waitMarginMs?: number;
@@ -179,7 +181,12 @@ export async function followRun(caller: ApbToolCaller, request: FollowRunRequest
   try {
     const start = await caller.callToolParsed(
       'playbook_run',
-      { id: request.playbookId, supervise: 'self', worktree: request.worktree },
+      {
+        id: request.playbookId,
+        supervise: 'self',
+        worktree: request.worktree,
+        ...(request.params === undefined ? {} : { params: request.params }),
+      },
       RunStartSchema,
       { timeoutMs: leftUntil(runDeadline) },
     );

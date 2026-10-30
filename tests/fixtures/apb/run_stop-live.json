@@ -1,0 +1,11 @@
+{
+  "tool": "run_stop",
+  "args": {
+    "run_id": "smoke-fail-1793367583063"
+  },
+  "isError": false,
+  "answer": {
+    "outcome": "signaled_live_driver",
+    "run_id": "smoke-fail-1793367583063"
+  }
+}

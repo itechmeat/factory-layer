@@ -1,10 +1,11 @@
 /**
  * Test double of a Mozaik `Endpoint`: records every request it receives and
- * answers with a scripted `infer` or `stream`. Used by the runner's unit
- * tests; no network.
+ * answers with a scripted `infer` or `stream`. Used by the runner's and the
+ * decision loop's unit tests; no network.
  */
 
 import {
+  FunctionCallItem,
   InputTokenDetails,
   ModelMessageItem,
   OutputTokenDetails,
@@ -44,6 +45,26 @@ export function answer(
     items: [ModelMessageItem.rehydrate({ text })],
     tokenUsage: usage,
     rowResponse: { choices: [{ message: { role: 'assistant', content: text } }] },
+  };
+}
+
+/** A valid answer that calls one function with `args` (serialized as the model sends them). */
+export function functionCall(name: string, args: unknown, callId = `call-${crypto.randomUUID()}`): InferenceOutput {
+  const json = JSON.stringify(args);
+  return {
+    items: [FunctionCallItem.rehydrate({ callId, name, args: json })],
+    tokenUsage: new TokenUsage(10, 2, 12, new InputTokenDetails(0), new OutputTokenDetails(0)),
+    rowResponse: {
+      choices: [
+        {
+          message: {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{ id: callId, type: 'function', function: { name, arguments: json } }],
+          },
+        },
+      ],
+    },
   };
 }
 

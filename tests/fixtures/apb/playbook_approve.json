@@ -1,0 +1,15 @@
+{
+  "tool": "playbook_approve",
+  "args": {
+    "id": "smoke"
+  },
+  "isError": false,
+  "answer": {
+    "digest": "sha256:68b9f43e0efd076af0584a25cfdd2c83cedc65cba57b005e7c2cab35f3e58e23",
+    "id": "smoke",
+    "lifecycle": "active",
+    "scope": "project",
+    "trusted": true,
+    "version": "1.0.0"
+  }
+}

@@ -1,7 +1,16 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["src/cli/index.ts", "src/**/*.test.ts", "scripts/*.ts", "tests/**/*.test.ts", "tests/fixtures/*.ts"],
-  "project": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"],
+  "entry": [
+    "scripts/*.ts!",
+    "!scripts/*.test.ts!",
+    "src/**/*.test.ts",
+    "src/**/testing/index.ts",
+    "tests/**/*.test.ts",
+    "tests/fixtures/*.ts"
+  ],
+  "project": ["src/**/*.ts!", "!src/**/testing/**!", "scripts/**/*.ts!", "tests/**/*.ts"],
   "ignoreDependencies": ["@swc/core"],
+  "ignoreBinaries": ["pgrep"],
+  "tags": ["-pending"],
   "ignoreExportsUsedInFile": true
 }

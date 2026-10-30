@@ -22,15 +22,8 @@ export function leftUntil(deadline: number): number {
   return Math.max(1, Math.floor(deadline - performance.now()));
 }
 
-/** Waits `ms` milliseconds. */
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
 /** Sleeps one poll interval, never past `deadline`. */
 export async function pauseBefore(deadline: number, pollIntervalMs: number): Promise<void> {
   const pause = Math.min(pollIntervalMs, deadline - performance.now());
-  if (pause > 0) await sleep(pause);
+  if (pause > 0) await Bun.sleep(pause);
 }

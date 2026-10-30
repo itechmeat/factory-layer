@@ -1,0 +1,8 @@
+name: agy
+description: 'TypeScript coding agent of the factory: code and unit tests inside one working tree'
+executor:
+  agent: agy
+  model: gemini-3.8-flash-high
+  fallbacks: []
+soul: any
+skills: []

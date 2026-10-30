@@ -1,0 +1,84 @@
+{
+  "models": {
+    "claude-opus-5-5": {
+      "available": true,
+      "inputUsdPerMillion": 4,
+      "outputUsdPerMillion": 20,
+      "cacheReadUsdPerMillion": 0.2,
+      "cacheWriteUsdPerMillion": 5,
+      "date": "2026-10-30",
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "note": "Cache write is the 5-minute rate."
+    },
+    "claude-sonnet-5-5": {
+      "available": true,
+      "inputUsdPerMillion": 2,
+      "outputUsdPerMillion": 10,
+      "cacheReadUsdPerMillion": 0.1,
+      "cacheWriteUsdPerMillion": 2.5,
+      "date": "2026-10-30",
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "note": "Cache write is the 5-minute rate."
+    },
+    "claude-haiku-5-5": {
+      "available": true,
+      "inputUsdPerMillion": 0.1,
+      "outputUsdPerMillion": 0.5,
+      "cacheReadUsdPerMillion": 0.01,
+      "cacheWriteUsdPerMillion": 0.125,
+      "date": "2026-10-30",
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "note": "Rates for prompts up to 100,000 tokens; cache write is the 5-minute rate."
+    },
+    "glm-5.3-flash": {
+      "available": true,
+      "inputUsdPerMillion": 0.15,
+      "outputUsdPerMillion": 0.5,
+      "cacheReadUsdPerMillion": 0.03,
+      "cacheWriteUsdPerMillion": 0,
+      "date": "2026-10-30",
+      "source": "https://docs.z.ai/guides/overview/pricing",
+      "note": "Cache read is the cached input rate; cached input storage is listed as limited-time free."
+    },
+    "nvidia/nemotron-3.5-super-vl:free": {
+      "available": true,
+      "inputUsdPerMillion": 0,
+      "outputUsdPerMillion": 0,
+      "cacheReadUsdPerMillion": 0,
+      "cacheWriteUsdPerMillion": 0,
+      "date": "2026-10-30",
+      "source": "https://openrouter.ai/api/v1/models",
+      "note": "The free OpenRouter variant lists a prompt and completion price of 0."
+    },
+    "gpt-6-sol": {
+      "available": true,
+      "inputUsdPerMillion": 2,
+      "outputUsdPerMillion": 10,
+      "cacheReadUsdPerMillion": 0.2,
+      "cacheWriteUsdPerMillion": 2.5,
+      "date": "2026-10-30",
+      "source": "https://openrouter.ai/api/v1/models",
+      "note": "OpenRouter list price of openai/gpt-6-sol for prompts up to 272,000 tokens."
+    },
+    "claude-sonnet-4-6": {
+      "available": true,
+      "inputUsdPerMillion": 3,
+      "outputUsdPerMillion": 15,
+      "cacheReadUsdPerMillion": 0.3,
+      "cacheWriteUsdPerMillion": 3.75,
+      "date": "2026-10-30",
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "note": "Anthropic list price, also used for the JigJoy gateway; cache write is the 5-minute rate."
+    },
+    "claude-haiku-4-5": {
+      "available": true,
+      "inputUsdPerMillion": 1,
+      "outputUsdPerMillion": 5,
+      "cacheReadUsdPerMillion": 0.1,
+      "cacheWriteUsdPerMillion": 1.25,
+      "date": "2026-10-30",
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "note": "Anthropic list price, also used for the JigJoy gateway; cache write is the 5-minute rate."
+    }
+  }
+}

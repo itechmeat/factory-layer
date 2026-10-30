@@ -1,0 +1,35 @@
+{
+  "via": "raw apb mcp stdio, two pipelined JSON-RPC requests (ids 10 and 11) on one session",
+  "runs": ["smoke-wait-1793367741244", "smoke-wait-1793367741329"],
+  "calls": {
+    "A_run1_timeout60s": {
+      "sent_rel": 0.0,
+      "answered_rel": 20.01,
+      "elapsed_s": 20.01,
+      "isError": false,
+      "answer": {
+        "next_after_seq": null,
+        "pending_review": null,
+        "pending_supervisor": null,
+        "reason": "ended",
+        "run_status": "succeeded",
+        "wake": null
+      }
+    },
+    "B_run2_timeout5s": {
+      "sent_rel": 0.5,
+      "answered_rel": 5.533,
+      "elapsed_s": 5.032,
+      "isError": false,
+      "answer": {
+        "next_after_seq": null,
+        "pending_review": null,
+        "pending_supervisor": null,
+        "reason": "timeout",
+        "run_status": "running",
+        "wake": null
+      }
+    }
+  },
+  "arrival_order": ["B_run2_timeout5s", "A_run1_timeout60s"]
+}

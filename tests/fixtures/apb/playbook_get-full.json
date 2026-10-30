@@ -1,0 +1,118 @@
+{
+  "tool": "playbook_get",
+  "args": {
+    "id": "implement-task",
+    "detail": "full"
+  },
+  "isError": false,
+  "answer": {
+    "id": "implement-task",
+    "layout": null,
+    "playbook": {
+      "defaults": {
+        "max_parallel": 2,
+        "max_retries": 1,
+        "on_failure": "stop",
+        "profile": {
+          "name": "claude",
+          "scope": "auto"
+        },
+        "require_verdict": true,
+        "timeout_seconds": null
+      },
+      "description": "Writes the code and unit tests of one planned task in the run's working tree, touching only the task's owned paths. The factory passes the working tree at start and commits the result itself.",
+      "edges": [
+        {
+          "condition": null,
+          "fallback": false,
+          "from": "start",
+          "join": null,
+          "to": "implement"
+        },
+        {
+          "condition": null,
+          "fallback": false,
+          "from": "implement",
+          "join": null,
+          "to": "finish"
+        }
+      ],
+      "effects": ["fs_read", "fs_write", "network"],
+      "id": "implement-task",
+      "name": "Implement a task",
+      "nodes": [
+        {
+          "cache": null,
+          "expected_duration": null,
+          "id": "start",
+          "inputs": null,
+          "outputs": null,
+          "title": null,
+          "type": "start"
+        },
+        {
+          "cache": null,
+          "connectors": [],
+          "expected_duration": "15m",
+          "id": "implement",
+          "inputs": null,
+          "interactive": false,
+          "isolation": null,
+          "max_retries": null,
+          "outputs": {
+            "fields": ["summary", "checks"],
+            "files": []
+          },
+          "profile": null,
+          "prompt": "Read the task description at {{params.task_file}} (relative to your working directory, which is the task's working tree).\n\nYou own only these paths, relative to the working tree:\n{{params.owned_paths}}\n\nImplement the task:\n1. Write a failing unit test for each behaviour the task asks for, then the code that makes it pass.\n2. Change nothing outside the owned paths. If the task cannot be done without that, stop and report it as a failure.\n3. Keep the tests runnable under both `npm test` and `bun test`.\n\nThen run `npm test` and `bun test` and any further check the task names; all must pass. Do not commit.\nReport in the status file: `summary` (what you changed, one paragraph) and `checks` (each command you ran and its result, one per line).\n",
+          "timeout_seconds": 1800,
+          "title": "Write the code and its unit tests",
+          "type": "agent_task",
+          "workdir": null
+        },
+        {
+          "cache": null,
+          "expected_duration": null,
+          "id": "finish",
+          "inputs": null,
+          "outcome": "success",
+          "outputs": null,
+          "profile": null,
+          "prompt": null,
+          "title": null,
+          "type": "finish"
+        }
+      ],
+      "params": [
+        {
+          "default": null,
+          "label": "Path of the task description, relative to the working tree",
+          "name": "task_file",
+          "options": null,
+          "type": "string"
+        },
+        {
+          "default": null,
+          "label": "Paths this run may create or change, relative to the working tree, one per line",
+          "name": "owned_paths",
+          "options": null,
+          "type": "string"
+        }
+      ],
+      "requires": {
+        "commands": ["git", "npm", "bun"],
+        "files": []
+      },
+      "schema": 2,
+      "supervisor": null,
+      "trigger": {
+        "avoid_when": ["fixing failing checks of earlier work (use repair)", "resolving a merge conflict (use integrate)"],
+        "examples": ["implement the task in the task file for these owned paths"],
+        "when": ["implement one planned factory task with unit tests in a given working tree"]
+      },
+      "version": "1.1.0"
+    },
+    "version": "1.1.0",
+    "yaml": "schema: 2\nid: implement-task\nname: Implement a task\ndescription: Writes the code and unit tests of one planned task in the run's working tree, touching only the task's owned paths. The factory passes the working tree at start and commits the result itself.\nversion: 1.1.0\nparams:\n- name: task_file\n  type: string\n  label: Path of the task description, relative to the working tree\n  options: null\n  default: null\n- name: owned_paths\n  type: string\n  label: Paths this run may create or change, relative to the working tree, one per line\n  options: null\n  default: null\ndefaults:\n  profile:\n    name: claude\n    scope: auto\n  max_retries: 1\n  timeout_seconds: null\n  on_failure: stop\n  require_verdict: true\n  max_parallel: 2\nsupervisor: null\ntrigger:\n  when:\n  - implement one planned factory task with unit tests in a given working tree\n  avoid_when:\n  - fixing failing checks of earlier work (use repair)\n  - resolving a merge conflict (use integrate)\n  examples:\n  - implement the task in the task file for these owned paths\nrequires:\n  files: []\n  commands:\n  - git\n  - npm\n  - bun\neffects:\n- fs_read\n- fs_write\n- network\nnodes:\n- id: start\n  title: null\n  expected_duration: null\n  inputs: null\n  outputs: null\n  cache: null\n  type: start\n- id: implement\n  title: Write the code and its unit tests\n  expected_duration: 15m\n  inputs: null\n  outputs:\n    files: []\n    fields:\n    - summary\n    - checks\n  cache: null\n  type: agent_task\n  prompt: |\n    Read the task description at {{params.task_file}} (relative to your working directory, which is the task's working tree).\n\n    You own only these paths, relative to the working tree:\n    {{params.owned_paths}}\n\n    Implement the task:\n    1. Write a failing unit test for each behaviour the task asks for, then the code that makes it pass.\n    2. Change nothing outside the owned paths. If the task cannot be done without that, stop and report it as a failure.\n    3. Keep the tests runnable under both `npm test` and `bun test`.\n\n    Then run `npm test` and `bun test` and any further check the task names; all must pass. Do not commit.\n    Report in the status file: `summary` (what you changed, one paragraph) and `checks` (each command you ran and its result, one per line).\n  profile: null\n  max_retries: null\n  timeout_seconds: 1800\n  workdir: null\n  isolation: null\n  connectors: []\n  interactive: false\n- id: finish\n  title: null\n  expected_duration: null\n  inputs: null\n  outputs: null\n  cache: null\n  type: finish\n  outcome: success\n  prompt: null\n  profile: null\nedges:\n- from: start\n  to: implement\n  condition: null\n  fallback: false\n  join: null\n- from: implement\n  to: finish\n  condition: null\n  fallback: false\n  join: null\n"
+  }
+}

@@ -14,6 +14,8 @@ exact = true
 # floor: end-to-end runs are the main gate, and unit tests cover only the
 # failure paths an end-to-end run cannot reproduce (see the project skill's
 # coding standards).
+# No test exports loop events to Mozaik Cloud unless asked (see the preload).
+preload = ["./tests/support/no-cloud-export.ts"]
 coverage = true
 coverageReporter = ["text", "lcov"]
 coverageSkipTestFiles = true

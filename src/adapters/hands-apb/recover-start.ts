@@ -33,23 +33,36 @@ export interface StartIdentity {
   readonly calledAtMs: number;
 }
 
-/** The id of the run matching `identity`, if one exists now; `onListed` fires once `runs_list` answered. */
-async function findRun(
+/** A run the lookup matched, with the status `run_status` reported. */
+export interface MatchedRun {
+  readonly runId: string;
+  readonly status: RunStatus;
+}
+
+/**
+ * The runs of `identity.playbookId` started at or after `identity.calledAtMs`
+ * in `identity.worktree`, each confirmed by its `run_status`; `onListed`
+ * fires once `runs_list` answered. `first` stops at the first match.
+ */
+export async function matchingRuns(
   caller: ApbToolCaller,
   identity: StartIdentity,
   deadline: number,
-  onListed: () => void,
-): Promise<string | undefined> {
+  options: { readonly onListed?: () => void; readonly first?: boolean } = {},
+): Promise<MatchedRun[]> {
   const runs = await caller.callToolParsed('runs_list', {}, RunsListSchema, { timeoutMs: leftUntil(deadline) });
-  onListed();
+  options.onListed?.();
   const candidates = runs.filter((run) => run.playbook === identity.playbookId && run.started_ts >= identity.calledAtMs);
+  const matches: MatchedRun[] = [];
   for (const candidate of candidates) {
     const status = await caller.callToolParsed('run_status', { run_id: candidate.run_id }, RunStatusAnswerSchema, {
       timeoutMs: leftUntil(deadline),
     });
-    if (status.worktree === identity.worktree) return candidate.run_id;
+    if (status.worktree !== identity.worktree) continue;
+    matches.push({ runId: candidate.run_id, status: status.run_status });
+    if (options.first === true) break;
   }
-  return undefined;
+  return matches;
 }
 
 /** Looks for the run until `cleanupDeadline`; stops it when found. */
@@ -64,9 +77,13 @@ export async function recoverStart(
   while (performance.now() < cleanupDeadline) {
     let runId: string | undefined;
     try {
-      runId = await findRun(caller, identity, cleanupDeadline, () => {
-        listed = true;
+      const [match] = await matchingRuns(caller, identity, cleanupDeadline, {
+        first: true,
+        onListed: () => {
+          listed = true;
+        },
       });
+      runId = match?.runId;
     } catch (error) {
       if (isDeadConnection(error)) return { kind: 'unknown', detail: messageOf(error) };
       // Any other failed lookup is retried until the cleanup deadline.

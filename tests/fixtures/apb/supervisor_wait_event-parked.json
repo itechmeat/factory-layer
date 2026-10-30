@@ -1,0 +1,23 @@
+{
+  "tool": "supervisor_wait_event",
+  "args": {
+    "token": "REDACTED",
+    "timeout_ms": 5000,
+    "after_seq": 8
+  },
+  "isError": false,
+  "answer": {
+    "next_after_seq": 8,
+    "pending_review": null,
+    "pending_supervisor": {
+      "how_to_decide": "To decide, use the supervisor tools: node_retry (re-run node `boom`), run_continue_from (advance from a chosen node), or run_abort.",
+      "instruction": "The supervised run is waiting for a supervisor decision after node `boom` failed. Available options: retry, continue_from, abort. To decide, use the supervisor tools: node_retry (re-run node `boom`), run_continue_from (advance from a chosen node), or run_abort.",
+      "node": "boom",
+      "options": ["retry", "continue_from", "abort"],
+      "trigger": "node_failed"
+    },
+    "reason": "timeout",
+    "run_status": "running",
+    "wake": null
+  }
+}

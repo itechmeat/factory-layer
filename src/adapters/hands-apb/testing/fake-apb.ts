@@ -1,6 +1,6 @@
 /**
- * A scripted fake of the `apb mcp` tool surface for the unit tests of
- * `follow-run.ts`. It behaves like the stdio MCP client where that matters:
+ * A scripted fake of the `apb mcp` tool surface for the unit tests of the
+ * APB adapter. It behaves like the stdio MCP client where that matters:
  * a call that outlives its `timeoutMs` rejects with `McpTimeoutError`, a
  * result that does not match the caller's schema rejects with
  * `McpValidationError`, and every call is recorded with its start time and
@@ -61,11 +61,16 @@ function withTimeout<T>(work: Promise<T>, name: string, timeoutMs: number | unde
 export class FakeApb implements ApbToolCaller {
   readonly calls: FakeCall[] = [];
   readonly secrets: string[] = [];
+  closed = false;
   private readonly handlers: Readonly<Record<string, FakeHandler>>;
   private readonly createdAt = performance.now();
 
   constructor(handlers: Readonly<Record<string, FakeHandler>>) {
     this.handlers = handlers;
+  }
+
+  async close(): Promise<void> {
+    this.closed = true;
   }
 
   addSecret(value: string): void {

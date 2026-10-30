@@ -154,7 +154,15 @@ describe('GuardedInferenceRunner: responses and usage', () => {
     const context = newContext();
     const attempt = runner.bind(context);
     expect(await runner.run(request(context))).toBe(reply);
-    expect(attempt.calls).toEqual([{ provider: 'zai', model: 'glm', elapsedMs: 250, usage: { kind: 'measured', input: 10, output: 2 } }]);
+    expect(attempt.calls).toEqual([
+      {
+        provider: 'zai',
+        model: 'glm',
+        endedAtMs: nowMs,
+        elapsedMs: 250,
+        usage: { kind: 'measured', input: 10, output: 2, cacheRead: 0, cacheWrite: 0 },
+      },
+    ]);
   });
 
   test('a response without usage succeeds with unavailable usage', async () => {
@@ -174,7 +182,7 @@ describe('GuardedInferenceRunner: responses and usage', () => {
     expect(attempt.calls[0]?.usage).toEqual({ kind: 'unavailable', reason: 'invalid_usage' });
   });
 
-  test('an empty response is a retryable malformed-response error', async () => {
+  test('an empty response is a retryable malformed-response error, recorded with unavailable usage', async () => {
     const empty: InferenceOutput = { items: [], tokenUsage: undefined, rowResponse: { choices: [] } };
     const runner = runnerWith(new FakeEndpoint({ infer: async () => empty }));
     const context = newContext();
@@ -182,7 +190,14 @@ describe('GuardedInferenceRunner: responses and usage', () => {
     const error = await rejection(runner.run(request(context)));
     expect(error.kind).toBe('malformed_response');
     expect(error.retryable).toBe(true);
-    expect(attempt.calls).toHaveLength(0);
+    expect(attempt.calls).toEqual([
+      expect.objectContaining({
+        provider: 'zai',
+        model: 'glm',
+        usage: { kind: 'unavailable', reason: 'call_failed' },
+        failure: 'malformed_response',
+      }),
+    ]);
   });
 
   test('a stream passes its events through and records the final output', async () => {

@@ -1,14 +1,17 @@
 /**
- * APB trust bootstrap for this project (`bun run apb:bootstrap`). From the
- * repository root, honouring `APB_CONFIG_DIR` when it is set:
+ * APB trust bootstrap for this project (`bun run apb:bootstrap [--agent <cli>]`).
+ * From the repository root, honouring `APB_CONFIG_DIR` when it is set:
  *
  * 1. re-writes every project profile under `.apb/profiles/` from its own
  *    `profile.yaml` and `SOUL.md`, with the digest `apb profile show`
  *    reports, which approves its bundle; the write must report trusted, no
  *    failed trust write and no unapproved skills;
- * 2. starts `apb mcp` (CLI execution mode) and approves the `smoke` and
- *    `smoke-stall` playbooks, which must come back trusted;
- * 3. prints the trust list entries of what it approved.
+ * 2. with `--agent <cli>`, republishes the four starter playbooks through
+ *    `playbook_update` with the project profile of that name as their
+ *    default profile (a starter that already defaults to it is left alone);
+ * 3. approves the smoke playbooks and the four starters through
+ *    `playbook_approve`, each of which must come back trusted;
+ * 4. prints the trust list entries of what it approved.
  *
  * Every subprocess and MCP call has a timeout; every failure is a
  * `BootstrapError` naming its step, and the process exits non-zero. Nothing
@@ -19,7 +22,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 
-import { connectMcpStdio } from '../src/adapters/mcp-stdio/client';
+import { connectMcpStdio, type McpStdioClient } from '../src/adapters/mcp-stdio/client';
 import { apbMcpCommand } from '../src/adapters/hands-apb/apb-command';
 
 /** The repository root, where `.apb/` lives. */
@@ -28,11 +31,18 @@ const REPO_ROOT = join(import.meta.dir, '..');
 /** Timeout of one `apb` CLI command, in milliseconds. */
 export const APB_CLI_TIMEOUT_MS = 30_000;
 
-/** Timeout of one `playbook_approve` call, in milliseconds. */
+/** Timeout of one `playbook_approve` or `playbook_update` call, in milliseconds. */
 export const APB_APPROVE_TIMEOUT_MS = 30_000;
 
-/** The playbooks the factory runs unattended; APB cannot trial a script playbook before the first commit. */
-export const BOOTSTRAP_PLAYBOOKS = ['smoke', 'smoke-stall'] as const;
+/** The coding playbooks the factory dispatches; `--agent` switches their default profile. */
+export const STARTER_PLAYBOOKS = ['scaffold', 'implement-task', 'repair', 'integrate'] as const;
+
+/**
+ * Every playbook the factory runs unattended, approved by explicit
+ * confirmation after review: APB cannot trial a script playbook before the
+ * first commit, and a starter's trial would run in the factory's own tree.
+ */
+export const BOOTSTRAP_PLAYBOOKS = ['smoke', 'smoke-stall', 'smoke-fail', ...STARTER_PLAYBOOKS] as const;
 
 /** A bootstrap step failed. */
 export class BootstrapError extends Error {
@@ -71,6 +81,8 @@ const ProfileWriteSchema = z.looseObject({
 });
 
 const ApproveSchema = z.looseObject({ trusted: z.boolean() });
+
+const UpdateSchema = z.looseObject({ id: z.string(), version: z.string().min(1) });
 
 const TrustListSchema = z.array(z.looseObject({ kind: z.string(), id: z.string(), digest: z.string(), approved_at_ms: z.number() }));
 
@@ -168,6 +180,69 @@ export function projectTrustLines(
   );
 }
 
+/** The command line options. */
+export interface BootstrapOptions {
+  /** The project profile the starters should default to; absent leaves them as they are. */
+  readonly agent: string | undefined;
+}
+
+/** Parses the bootstrap's arguments (`--agent <cli>` or `--agent=<cli>`). */
+export function parseBootstrapArgs(argv: readonly string[]): BootstrapOptions {
+  let agent: string | undefined;
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index] ?? '';
+    if (arg === '--agent' || arg.startsWith('--agent=')) {
+      const value = arg === '--agent' ? argv[(index += 1)] : arg.slice('--agent='.length);
+      if (value === undefined || value === '' || value.startsWith('-'))
+        throw new BootstrapError('arguments', '--agent needs a profile name');
+      agent = value;
+    } else {
+      throw new BootstrapError('arguments', `unknown argument ${arg}; usage: apb:bootstrap [--agent <cli>]`);
+    }
+  }
+  return { agent };
+}
+
+/** Fails unless `agent` names one of the project profiles. */
+export function checkAgent(agent: string, profiles: readonly string[]): void {
+  if (!profiles.includes(agent)) {
+    throw new BootstrapError('arguments', `no project profile named ${agent}; the project profiles are ${profiles.join(', ')}`);
+  }
+}
+
+/** The `defaults.profile` block of a stored playbook, as APB writes it. */
+const DEFAULT_PROFILE_BLOCK = /^defaults:\n {2}profile:\n {4}name: (\S+)\n/m;
+
+const PlaybookDefaultsSchema = z.looseObject({
+  id: z.string(),
+  defaults: z.looseObject({ profile: z.looseObject({ name: z.string() }) }),
+});
+
+/** The default profile a stored playbook names. */
+export function defaultProfileOf(id: string, yaml: string): string {
+  const parsed = PlaybookDefaultsSchema.safeParse(Bun.YAML.parse(yaml));
+  if (!parsed.success) throw new BootstrapError(`playbook ${id}`, `no default profile: ${problemOf(parsed.error)}`);
+  return parsed.data.defaults.profile.name;
+}
+
+/** `yaml` with `profile` as its default profile; everything else stays byte for byte. */
+export function withDefaultProfile(id: string, yaml: string, profile: string): string {
+  if (!DEFAULT_PROFILE_BLOCK.test(yaml)) {
+    throw new BootstrapError(`playbook ${id}`, 'the playbook has no defaults.profile.name block to switch');
+  }
+  const updated = yaml.replace(DEFAULT_PROFILE_BLOCK, `defaults:\n  profile:\n    name: ${profile}\n`);
+  if (defaultProfileOf(id, updated) !== profile)
+    throw new BootstrapError(`playbook ${id}`, 'the switched playbook does not name the profile');
+  return updated;
+}
+
+/** The version a `playbook_update` answer reports. */
+export function checkUpdate(id: string, answer: unknown): string {
+  const parsed = UpdateSchema.safeParse(answer);
+  if (!parsed.success) throw new BootstrapError(`playbook ${id}`, `unexpected update answer: ${problemOf(parsed.error)}`);
+  return parsed.data.version;
+}
+
 /** How one `apb` CLI command ended. */
 export interface ApbExit {
   readonly signal: string | number | null;
@@ -213,11 +288,34 @@ async function rewriteProfile(name: string): Promise<string> {
   return checkProfileWrite(name, parseJsonOutput(`profile ${name}`, written, z.unknown()));
 }
 
-async function approvePlaybooks(): Promise<void> {
+/** The YAML of the current version of a project playbook. */
+function currentPlaybookYaml(id: string): string {
+  const dir = join(REPO_ROOT, '.apb', 'playbooks', id);
+  const version = readFileSync(join(dir, 'current'), 'utf8').trim();
+  return readFileSync(join(dir, version, 'playbook.yaml'), 'utf8');
+}
+
+/** Republishes the starters that do not default to `agent` yet; returns what changed, one line each. */
+async function switchStarters(client: McpStdioClient, agent: string): Promise<string[]> {
+  const changed: string[] = [];
+  for (const id of STARTER_PLAYBOOKS) {
+    const yaml = currentPlaybookYaml(id);
+    if (defaultProfileOf(id, yaml) === agent) continue;
+    const answer = await client.callToolParsed('playbook_update', { id, yaml: withDefaultProfile(id, yaml, agent) }, z.unknown(), {
+      timeoutMs: APB_APPROVE_TIMEOUT_MS,
+    });
+    changed.push(`playbook ${id}: version ${checkUpdate(id, answer)} defaults to profile ${agent}`);
+  }
+  return changed;
+}
+
+/** Switches the starters when asked, then approves every bootstrap playbook. */
+async function publishAndApprove(agent: string | undefined): Promise<void> {
   const apbPath = Bun.which('apb');
   if (apbPath === null) throw new BootstrapError('apb mcp', 'apb is not on the PATH');
   const client = await connectMcpStdio(apbMcpCommand(apbPath, REPO_ROOT));
   try {
+    if (agent !== undefined) for (const line of await switchStarters(client, agent)) console.log(line);
     for (const id of BOOTSTRAP_PLAYBOOKS) {
       const answer = await client.callToolParsed('playbook_approve', { id }, z.unknown(), {
         timeoutMs: APB_APPROVE_TIMEOUT_MS,
@@ -238,14 +336,17 @@ function projectProfiles(): string[] {
 }
 
 async function main(): Promise<void> {
+  const { agent } = parseBootstrapArgs(Bun.argv.slice(2));
+  const profiles = projectProfiles();
+  if (agent !== undefined) checkAgent(agent, profiles);
   const location = process.env['APB_CONFIG_DIR'] ? 'the APB_CONFIG_DIR trust store' : 'the default APB trust store';
   console.log(`APB trust bootstrap into ${location}`);
   const bundleDigests: string[] = [];
-  for (const name of projectProfiles()) {
+  for (const name of profiles) {
     bundleDigests.push(await rewriteProfile(name));
     console.log(`profile ${name}: bundle approved`);
   }
-  await approvePlaybooks();
+  await publishAndApprove(agent);
   console.log(`playbooks approved: ${BOOTSTRAP_PLAYBOOKS.join(', ')}`);
   const list = parseJsonOutput('trust list', await apb('trust list', ['trust', 'list', '--json']), TrustListSchema);
   for (const line of projectTrustLines(list, { playbookIds: BOOTSTRAP_PLAYBOOKS, bundleDigests })) console.log(line);

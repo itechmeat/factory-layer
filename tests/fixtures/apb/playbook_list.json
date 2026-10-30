@@ -1,0 +1,63 @@
+{
+  "tool": "playbook_list",
+  "args": {},
+  "isError": false,
+  "answer": [
+    {
+      "current": "1.1.0",
+      "description": "Writes the code and unit tests of one planned task in the run's working tree, touching only the task's owned paths. The factory passes the working tree at start and commits the result itself.",
+      "frozen": false,
+      "id": "implement-task",
+      "name": "Implement a task",
+      "versions": ["1.0.0", "1.1.0"]
+    },
+    {
+      "current": "1.4.0",
+      "description": "Resolves a merge conflict left in the run's working tree so both sides' intent survives, runs the tests and commits the merge. The factory passes the working tree at start.",
+      "frozen": false,
+      "id": "integrate",
+      "name": "Integrate a conflicting merge",
+      "versions": ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0"]
+    },
+    {
+      "current": "1.1.0",
+      "description": "Fixes the given failing checks of a task in the run's working tree, touching only the task's owned paths. The factory passes the working tree at start and commits the result itself.",
+      "frozen": false,
+      "id": "repair",
+      "name": "Repair failing checks",
+      "versions": ["1.0.0", "1.1.0"]
+    },
+    {
+      "current": "1.1.0",
+      "description": "Creates the skeleton of a small TypeScript package (a CLI or an HTTP API) in the run's working tree, with a unit test setup that runs under both npm test and bun test. The factory passes the working tree at start and commits the result itself.",
+      "frozen": false,
+      "id": "scaffold",
+      "name": "Scaffold a package",
+      "versions": ["1.0.0", "1.1.0"]
+    },
+    {
+      "current": "1.0.0",
+      "description": "Deterministic liveness check of the factory's APB link. One script node prints a fixed JSON line; no model, no file writes.",
+      "frozen": false,
+      "id": "smoke",
+      "name": "Factory smoke",
+      "versions": ["1.0.0"]
+    },
+    {
+      "current": "1.0.0",
+      "description": "Deterministic failure check of the factory's APB link. One script node prints a fixed line and exits 1, so the run reports a node failure; no model, no file writes.",
+      "frozen": false,
+      "id": "smoke-fail",
+      "name": "Factory failure smoke",
+      "versions": ["1.0.0"]
+    },
+    {
+      "current": "1.0.0",
+      "description": "Never-finishing check of the factory's stop path. One script node sleeps for an hour; the caller stops the run long before that. No model, no file writes.",
+      "frozen": false,
+      "id": "smoke-stall",
+      "name": "Factory stall smoke",
+      "versions": ["1.0.0"]
+    }
+  ]
+}

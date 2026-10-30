@@ -1,0 +1,8 @@
+name: codex
+description: 'TypeScript coding agent of the factory: code and unit tests inside one working tree'
+executor:
+  agent: codex
+  model: gpt-6-sol
+  fallbacks: []
+soul: any
+skills: []
