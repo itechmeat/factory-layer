@@ -51,7 +51,8 @@ ZCode owns, until merged: `scripts/hidden-run.ts`, `scripts/hidden-run-steps.ts`
 - [x] 4.1 Portability audit of `src/` and `scripts/` (design D10.1); tests then code for every finding on the demo and hidden-run paths (including the tool directory with `~/.bun/bin` and `/opt/homebrew/bin` layouts); verify with the tests and `bun run check:fast`
 - [x] 4.2 README "macOS setup" (design D10.3)
 - [x] 4.3 Write the Mac agent prompt (Russian, git-ignored private notes): clone or update the repository, `bun install`, `.env`, `bun run apb:bootstrap`, `factory doctor`, one demo run of `demo-units.md`, one hidden-run dry run with the two practice specs, report every output and failure, no commits or pushes
-- [ ] 4.4 The Mac agent runs the prompt; every failure is fixed here and re-run there until `factory doctor`, the demo run and the dry run pass on the Mac with JigJoy configured, recording the provider and model the demo run used (a fallback success does not count; blocker for the live demo)
+- [x] 4.4 The Mac agent runs the prompt; every failure is fixed here and re-run there until `factory doctor`, the demo run and the dry run pass on the Mac with JigJoy configured, recording the provider and model the demo run used (a fallback success does not count; blocker for the live demo)
+  - done 2026-10-30 on the owner's Mac with the brain on Z.ai (the Mac's policy allows Claude only through the subscription, so the JigJoy gateway is proven on the Linux machine instead): `factory doctor` all ok (Homebrew bash 5, real node behind the nvm shim); demo-units succeeded in 4 min 36 s; hidden-run dry run on wordfreq and notes-api delivered, built and passed the startup check. Fixes found there: Homebrew bash, real node behind PATH shims in every generated-code environment, server bin startup check, no ancestor package resolution, `--replace`
 
 ## 5. Playbook authoring (after the hidden-run path is proven)
 
@@ -63,7 +64,8 @@ ZCode owns, until merged: `scripts/hidden-run.ts`, `scripts/hidden-run-steps.ts`
 ## 6. README and demo walkthrough
 
 - [x] 6.1 README "Running the factory": `doctor`, `run` with `--out`, `--cutoff`, `--task-concurrency`, reports, `author`, the hidden-run script and its configurable times (defaults: cutoff 19:15, hard deadline 19:22, report by 19:26), the trust model (task trees under `work/` because APB requires it, the allowlisted environment), the demo steps; no machine paths
-- [ ] 6.2 One demo walkthrough on the Mac following the README: doctor, APB dashboard, a live run of `demo-units.md` (its acceptance: under 10 minutes, overlapping executor runs), reports, the authoring result, the offline fallback; problems fixed
+- [x] 6.2 One demo walkthrough on the Mac following the README: doctor, APB dashboard, a live run of `demo-units.md` (its acceptance: under 10 minutes, overlapping executor runs), reports, the authoring result, the offline fallback; problems fixed
+  - the automated part ran on the Mac (doctor, live demo-units run, reports, dry run); the presenter walkthrough with the APB dashboard is the owner's rehearsal
 
 ## 7. HTML report (optional, last)
 
