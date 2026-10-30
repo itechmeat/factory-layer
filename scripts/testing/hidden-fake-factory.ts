@@ -101,6 +101,38 @@ function writeDeliverHttp(outDir: string, name: string, startCommand: string): v
   );
 }
 
+/** The server source: listens on the PORT the caller passes and ignores every argument. */
+const SERVER_SOURCE =
+  [
+    "const http = require('node:http');",
+    'const port = Number(process.env.PORT);',
+    'if (!(port > 0)) process.exit(2);',
+    'http.createServer((request, response) => { response.end("fake-http\\n"); })',
+    '  .listen(port, () => { process.stdout.write("fake-http listening on " + String(port) + "\\n"); });',
+  ].join('\n') + '\n';
+
+/** The files of `mode: server-bin`: an HTTP package whose only bin is the file its start script launches (it ignores --help). */
+function writeServerBin(outDir: string, name: string): void {
+  writeFileSync(join(outDir, '.gitignore'), DELIVERY_GITIGNORE);
+  writeFileSync(
+    join(outDir, 'package.json'),
+    `${JSON.stringify({ name, version: '1.0.0', private: true, bin: { 'notes-api': 'dist/src/main.js' }, scripts: { start: 'node ./dist/src/main.js' } }, null, 2)}\n`,
+  );
+  mkdirSync(join(outDir, 'dist', 'src'), { recursive: true });
+  writeFileSync(join(outDir, 'dist', 'src', 'main.js'), SERVER_SOURCE);
+}
+
+/** The files of `mode: server-main-bin`: as server-bin, but the start script is `node .` and `main` names the bin file. */
+function writeServerMainBin(outDir: string, name: string): void {
+  writeFileSync(join(outDir, '.gitignore'), DELIVERY_GITIGNORE);
+  writeFileSync(
+    join(outDir, 'package.json'),
+    `${JSON.stringify({ name, version: '1.0.0', private: true, main: 'dist/src/main.js', bin: { 'notes-api': 'dist/src/main.js' }, scripts: { start: 'node .' } }, null, 2)}\n`,
+  );
+  mkdirSync(join(outDir, 'dist', 'src'), { recursive: true });
+  writeFileSync(join(outDir, 'dist', 'src', 'main.js'), SERVER_SOURCE);
+}
+
 /** The files of `mode: missing-import`: a bin whose import is not delivered. */
 function writeMissingImport(outDir: string, name: string): void {
   writeFileSync(join(outDir, '.gitignore'), DELIVERY_GITIGNORE);
@@ -117,6 +149,15 @@ function writeBinWithBody(outDir: string, name: string, body: string): void {
   writeFileSync(join(outDir, 'package.json'), `${JSON.stringify({ name, version: '1.0.0', private: true, bin: 'cli.js' }, null, 2)}\n`);
   writeFileSync(join(outDir, 'cli.js'), body);
 }
+
+/** A CLI that waits forever when its stdin is a pipe, and exits 0 when stdin is closed (/dev/null). */
+const STDIN_CLOSED_BODY =
+  [
+    "const { fstatSync } = require('node:fs');",
+    'if (fstatSync(0).isCharacterDevice()) process.exit(0);',
+    'process.stdin.resume();',
+    'setInterval(() => {}, 60_000);',
+  ].join('\n') + '\n';
 
 function main(): void {
   const argv = process.argv.slice(2);
@@ -142,6 +183,18 @@ function main(): void {
       break;
     case 'deliver-bun-http':
       writeDeliverHttp(outDir, name, 'bun server.js');
+      break;
+    case 'server-bin':
+      writeServerBin(outDir, name);
+      break;
+    case 'server-main-bin':
+      writeServerMainBin(outDir, name);
+      break;
+    case 'stdin-closed-bin':
+      writeBinWithBody(outDir, name, STDIN_CLOSED_BODY);
+      break;
+    case 'hanging-bin':
+      writeBinWithBody(outDir, name, 'setInterval(() => {}, 60_000);\n');
       break;
     case 'missing-import':
       writeMissingImport(outDir, name);

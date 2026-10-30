@@ -39,6 +39,8 @@ export interface RunCommandInput {
   readonly cwd: string;
   readonly timeoutMs: number;
   readonly stdin?: string;
+  /** Starts the command with stdin closed (/dev/null) instead of a pipe; `stdin` is then not written. */
+  readonly ignoreStdin?: boolean;
   /** The whole environment of the command; nothing of the factory's own environment is inherited. */
   readonly env: ChildEnv;
   readonly secrets: readonly string[];
@@ -111,7 +113,7 @@ export function runCommand(input: RunCommandInput): Promise<CommandOutcome> {
       env: input.env,
       // The child leads its own process group, so a timeout kills its descendants too.
       detached: true,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: [input.ignoreStdin === true ? 'ignore' : 'pipe', 'pipe', 'pipe'],
     });
     trackProcessGroup(child);
     if (child.pid !== undefined) input.onStart?.(child.pid);
