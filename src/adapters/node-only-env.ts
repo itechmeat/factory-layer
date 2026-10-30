@@ -14,7 +14,9 @@
  * `node` is resolved to a real binary (a version-manager shim that reads
  * the operator's `HOME` would fail under the scratch `HOME`): the candidate
  * is asked once for `process.execPath`, and `npm` and `npx` come from the
- * `bin` directory next to that binary.
+ * `bin` directory next to that binary. The bun-runtime environment puts the
+ * same tool directory first and the factory's `PATH` after it, so `bun`
+ * stays reachable while `node`, `npm` and `npx` are the real binaries.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -174,4 +176,15 @@ export function toolDir(path: string): string {
  */
 export function nodeOnlyEnv(home: string, extra: ChildEnv = {}): ChildEnv {
   return { ...generatedCodeEnv(home, extra), PATH: toolDir(process.env['PATH'] ?? '') };
+}
+
+/**
+ * The environment of a process under the `bun` runtime: `generatedCodeEnv(home, extra)`
+ * with `PATH` set to the tool directory of the factory's own `PATH` followed by
+ * that `PATH`, so `bun` is found and `node` resolves to the real binary, never
+ * a version-manager shim that needs the operator's `HOME`.
+ */
+export function bunRuntimeEnv(home: string, extra: ChildEnv = {}): ChildEnv {
+  const path = process.env['PATH'] ?? '';
+  return { ...generatedCodeEnv(home, extra), PATH: [toolDir(path), path].join(delimiter) };
 }

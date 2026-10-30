@@ -13,7 +13,6 @@
  */
 
 import { homedir } from 'node:os';
-import { join } from 'node:path';
 
 import { z } from 'zod';
 
@@ -22,9 +21,9 @@ import { parseBrainConfig } from '../adapters/brain-mozaik/config';
 import { createMozaikDecider } from '../adapters/brain-mozaik/decider';
 import { apbMcpCommand } from '../adapters/hands-apb/apb-command';
 import { STARTER_PARAMS } from '../adapters/hands-apb/start-inputs';
-import { withScratchHome } from '../adapters/child-env';
+import { withScratchHome, type ChildEnv } from '../adapters/child-env';
 import { systemClock } from '../adapters/index';
-import { nodeOnlyEnv } from '../adapters/node-only-env';
+import { bunRuntimeEnv, nodeOnlyEnv } from '../adapters/node-only-env';
 import type { McpServerCommand } from '../adapters/mcp-stdio/client';
 import type { Env } from './compose';
 import { bashCommand, bashMajorVersion } from '../adapters/shell';
@@ -79,21 +78,30 @@ export async function bashReport(shell: string, signal: AbortSignal): Promise<st
   return `${path} (bash ${String(major)})`;
 }
 
+/** Runs `node` (resolved on the `PATH` of `env`) with `--version` in `env`; rejects naming `label` when it does not start. */
+async function nodeVersionIn(label: string, env: ChildEnv, home: string, signal: AbortSignal): Promise<string> {
+  const node = Bun.which('node', { PATH: env['PATH'] ?? '' });
+  if (node === null) throw new Error(`node is not on the PATH of the ${label} environment`);
+  const child = Bun.spawn([node, '--version'], { env, cwd: home, stdout: 'pipe', stderr: 'pipe', stdin: 'ignore', signal });
+  const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+  if (code !== 0) {
+    throw new Error(`node did not start in the ${label} environment (exit ${String(code)}): ${stderr.trim().slice(0, 200)}`);
+  }
+  return `${stdout.trim()} (${node})`;
+}
+
 /**
- * Runs `node --version` as generated code would see it: the scratch HOME and
- * the Node-only tool directory. Rejects with a hint when node does not start
- * (a version-manager shim that needs the operator's HOME is the usual cause).
+ * Runs `node --version` as generated code would see it: the scratch HOME
+ * with the Node-only environment, then with the bun-runtime environment
+ * (the `bun` steps, whose scripts call `node` too). Rejects with the exit
+ * code when node does not start in either (a version-manager shim that
+ * needs the operator's HOME is the usual cause).
  */
 export async function nodeStartReport(signal: AbortSignal): Promise<string> {
   return withScratchHome(async (home) => {
-    const env = nodeOnlyEnv(home);
-    const node = join(env['PATH'] ?? '', 'node');
-    const child = Bun.spawn([node, '--version'], { env, cwd: home, stdout: 'pipe', stderr: 'pipe', stdin: 'ignore', signal });
-    const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-    if (code !== 0) {
-      throw new Error(`node did not start in the generated-code environment (exit ${String(code)}): ${stderr.trim().slice(0, 200)}`);
-    }
-    return `${stdout.trim()} (${node})`;
+    const nodeOnly = await nodeVersionIn('Node-only generated-code', nodeOnlyEnv(home), home, signal);
+    const bun = await nodeVersionIn('bun-runtime generated-code', bunRuntimeEnv(home), home, signal);
+    return `${nodeOnly}; bun runtime: ${bun}`;
   });
 }
 

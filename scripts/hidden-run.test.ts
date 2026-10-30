@@ -42,6 +42,7 @@ function optionsFor(repo: string, specModes: readonly string[], write: (line: st
     hiddenDir: join(repo, 'hidden'),
     factoryCommand: ['bun', FAKE_FACTORY_PATH],
     taskConcurrency: 2,
+    replace: false,
     termGraceMs: 1_000,
     git: realGit,
     write,
@@ -188,6 +189,7 @@ describe('parseTimes and parseCommandLine', () => {
     expect(parsed.hardDeadlineMs).toBe(new Date(2026, 9, 30, 19, 22).getTime());
     expect(parsed.reportByMs).toBe(new Date(2026, 9, 30, 19, 26).getTime());
     expect(parsed.taskConcurrency).toBe(2);
+    expect(parsed.replace).toBe(false);
   });
 
   test('every option is taken', () => {
@@ -198,6 +200,7 @@ describe('parseTimes and parseCommandLine', () => {
     expect(parsed.cutoff).toBe('18:20');
     expect(parsed.hardDeadlineMs).toBe(new Date(2026, 9, 30, 18, 25).getTime());
     expect(parsed.taskConcurrency).toBe(3);
+    expect(parseCommandLine(['a.md', '--replace'], now).replace).toBe(true);
   });
 
   test('no spec, an unknown option or a bad concurrency is an error', () => {

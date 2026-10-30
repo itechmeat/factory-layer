@@ -20,6 +20,7 @@ import { runCommand } from '../src/adapters/check-runner/process';
 import { withScratchHome } from '../src/adapters/child-env';
 import type { CommandOutcome } from '../src/ports/check-runner';
 import { nodeOnlyEnv } from '../src/adapters/node-only-env';
+import { npmArgs } from '../src/adapters/package-guard';
 import { INSTALL_TIMEOUT_MS, failedDetail, outputTail, readManifest, type PackageManifestType, type StepOutcome } from './hidden-run-steps';
 
 /** The timeout of one `node <bin> --help` run, in milliseconds. */
@@ -183,7 +184,7 @@ async function startServer(packageDir: string, home: string, port: number, bound
   let done = false;
   const command = runCommand({
     command: 'npm',
-    args: ['run', 'start'],
+    args: npmArgs(packageDir, ['run', 'start']),
     cwd: packageDir,
     timeoutMs: boundMs,
     env: nodeOnlyEnv(home, { PORT: String(port), NO_COLOR: '1', FORCE_COLOR: '0' }),
@@ -217,7 +218,7 @@ export async function startupCheck(repoRoot: string, files: readonly string[], d
       const env = nodeOnlyEnv(home, { NO_COLOR: '1', FORCE_COLOR: '0' });
       const install = await runCommand({
         command: 'npm',
-        args: ['install', '--ignore-scripts'],
+        args: npmArgs(packageDir, ['install', '--ignore-scripts']),
         cwd: packageDir,
         timeoutMs: Math.min(INSTALL_TIMEOUT_MS, deadlineMs - Date.now()),
         env,

@@ -1,4 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
+import { existsSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { ProcessCheckRunner } from './check-runner';
 import { cleanupFixturePackages, fixturePackage } from './testing/fixture-package';
@@ -107,6 +109,24 @@ describe('ProcessCheckRunner.packageSteps', () => {
     const result = await new ProcessCheckRunner().packageSteps('/nonexistent-fcr-dir-xyz', ['bun']);
     expect(result.ok).toBe(false);
     expect(result.steps.map((step) => `${step.step}:${String(step.ok)}`)).toEqual(['install:false']);
+  });
+
+  test('a directory without package.json under a package fails its install and leaves the parent untouched', async () => {
+    const parent = await fixturePackage({ 'package.json': packageJson({ test: 'echo parent' }) });
+    const dir = join(parent, 'work', 'task');
+    mkdirSync(dir, { recursive: true });
+    const result = await new ProcessCheckRunner().packageSteps(dir, ['npm', 'bun']);
+
+    expect(result.ok).toBe(false);
+    expect(result.steps.map((step) => `${step.runtime}:${step.step}:${String(step.ok)}`)).toEqual([
+      'npm:install:false',
+      'bun:install:false',
+    ]);
+    expect(result.steps[0]?.detail).toBe(`no package.json in ${dir}`);
+    for (const name of ['package-lock.json', 'bun.lock', 'node_modules']) {
+      expect(existsSync(join(parent, name))).toBe(false);
+      expect(existsSync(join(dir, name))).toBe(false);
+    }
   });
 
   test('a broken build fails the runtime without running its tests', async () => {

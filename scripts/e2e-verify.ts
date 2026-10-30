@@ -18,8 +18,9 @@ import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { z } from 'zod';
 
-import { generatedCodeEnv, withScratchHome } from '../src/adapters/child-env';
-import { nodeOnlyEnv } from '../src/adapters/node-only-env';
+import { withScratchHome } from '../src/adapters/child-env';
+import { bunRuntimeEnv, nodeOnlyEnv } from '../src/adapters/node-only-env';
+import { npmArgs } from '../src/adapters/package-guard';
 import { bashCommand } from '../src/adapters/shell';
 import { commandNameOf, compareExample, toNodeCommand, type SpecExample } from './e2e-examples';
 import { runBeforeDeadline, tail, type Deadline } from './e2e-process';
@@ -92,10 +93,10 @@ function readPackage(dir: string): PackageJson | string {
   }
 }
 
-/** Environment of the verification steps: the generated-code allowlist, Node-only unless the step runs under bun, no colour codes. */
+/** Environment of the verification steps: the generated-code allowlist, Node-only unless the step runs under bun (then the bun-runtime one, real node first), no colour codes. */
 function stepEnv(home: string, runtime: Runtime): Readonly<Record<string, string>> {
   const extra = { NO_COLOR: '1', FORCE_COLOR: '0' };
-  return runtime === 'bun' ? generatedCodeEnv(home, extra) : nodeOnlyEnv(home, extra);
+  return runtime === 'bun' ? bunRuntimeEnv(home, extra) : nodeOnlyEnv(home, extra);
 }
 
 async function step(
@@ -106,7 +107,9 @@ async function step(
   timeoutMs: number,
   deadline: Deadline,
 ): Promise<StepResult> {
-  const [command, ...args] = argv;
+  const [command, ...rest] = argv;
+  // An npm step is pinned to its own directory, so npm never resolves an ancestor's package.
+  const args = command === 'npm' ? npmArgs(where.cwd, rest) : rest;
   const result = await runBeforeDeadline({ command, args, cwd: where.cwd, timeoutMs, env: stepEnv(where.home, runtime) }, deadline);
   return {
     name,

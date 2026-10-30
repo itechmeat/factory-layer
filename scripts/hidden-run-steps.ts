@@ -15,7 +15,9 @@ import { z } from 'zod';
 
 import { gitEnv, withScratchHome } from '../src/adapters/child-env';
 import { nodeOnlyEnv } from '../src/adapters/node-only-env';
+import { npmArgs } from '../src/adapters/package-guard';
 import { runCommand } from '../src/adapters/check-runner/process';
+import { DELIVERY_MARKER } from '../src/adapters/workspace-git/git-workspace';
 import { specNameFromFileName } from '../src/domain/spec';
 import type { CommandOutcome } from '../src/ports/check-runner';
 
@@ -32,6 +34,8 @@ export interface HiddenOptions {
   readonly hiddenDir: string;
   readonly factoryCommand: readonly string[];
   readonly taskConcurrency: number;
+  /** `--replace`: an earlier factory delivery in hidden/<name> (it holds the delivery marker) is removed before the run. */
+  readonly replace: boolean;
   readonly termGraceMs: number;
   /** The only git the run may do: read-only listing calls, each bounded by `timeoutMs` when given. */
   readonly git: (args: readonly string[], cwd: string, timeoutMs?: number) => Promise<string>;
@@ -114,8 +118,30 @@ export function readManifest(dir: string, where: string): ManifestRead {
   return { ok: true, manifest: parsed.data };
 }
 
-/** One plan per spec: name from specNameFromFileName, a copy `<name>-<HHMMSS>.md` in scratchDir, outDir `<hiddenDir>/<name>`. Throws on a duplicate name or a non-empty outDir. */
-export function planSpecs(specPaths: readonly string[], hiddenDir: string, scratchDir: string, now: Date): readonly SpecPlan[] {
+/** Why `outDir` cannot take a new delivery, or null when it can: a non-empty directory needs `replace` and the delivery marker. */
+function outDirRefusal(outDir: string, replace: boolean): string | null {
+  if (!existsSync(outDir) || readdirSync(outDir).length === 0) return null;
+  if (!replace) {
+    return `the output directory ${outDir} is not empty; move or remove the old delivery, or pass --replace to remove it`;
+  }
+  if (!existsSync(join(outDir, DELIVERY_MARKER))) {
+    return `the output directory ${outDir} is not empty and holds no ${DELIVERY_MARKER}; --replace removes only a factory delivery, so move or remove it by hand`;
+  }
+  return null;
+}
+
+/**
+ * One plan per spec: name from specNameFromFileName, a copy `<name>-<HHMMSS>.md` in scratchDir, outDir `<hiddenDir>/<name>`.
+ * Throws on a duplicate name or a non-empty outDir; with `replace`, a non-empty outDir that holds the delivery marker
+ * is removed instead, and only after every spec passed these checks, so a refusal removes nothing.
+ */
+export function planSpecs(
+  specPaths: readonly string[],
+  hiddenDir: string,
+  scratchDir: string,
+  now: Date,
+  replace = false,
+): readonly SpecPlan[] {
   const plans: SpecPlan[] = [];
   const seen = new Set<string>();
   for (const specPath of specPaths) {
@@ -123,12 +149,13 @@ export function planSpecs(specPaths: readonly string[], hiddenDir: string, scrat
     if (seen.has(name)) throw new Error(`two specs share the name ${JSON.stringify(name)} (${specPath})`);
     seen.add(name);
     const outDir = join(hiddenDir, name);
-    if (existsSync(outDir) && readdirSync(outDir).length > 0) {
-      throw new Error(`the output directory ${outDir} is not empty`);
-    }
-    const copyPath = join(scratchDir, `${name}-${hhmmss(now)}.md`);
-    copyFileSync(specPath, copyPath);
-    plans.push({ name, specPath, copyPath, outDir });
+    const refusal = outDirRefusal(outDir, replace);
+    if (refusal !== null) throw new Error(refusal);
+    plans.push({ name, specPath, copyPath: join(scratchDir, `${name}-${hhmmss(now)}.md`), outDir });
+  }
+  for (const plan of plans) {
+    if (replace) rmSync(plan.outDir, { recursive: true, force: true });
+    copyFileSync(plan.specPath, plan.copyPath);
   }
   return plans;
 }
@@ -229,7 +256,7 @@ export async function buildInPlace(dir: string, deadlineMs: number): Promise<Ste
       const env = nodeOnlyEnv(home, { NO_COLOR: '1', FORCE_COLOR: '0' });
       const install = await runCommand({
         command: 'npm',
-        args: ['install', '--ignore-scripts'],
+        args: npmArgs(copyDir, ['install', '--ignore-scripts']),
         cwd: copyDir,
         timeoutMs: Math.min(INSTALL_TIMEOUT_MS, deadlineMs - Date.now()),
         env,
@@ -240,7 +267,7 @@ export async function buildInPlace(dir: string, deadlineMs: number): Promise<Ste
       if (manifest.manifest.scripts?.['build'] === undefined) return { ok: true, detail: 'no build script' };
       const build = await runCommand({
         command: 'npm',
-        args: ['run', 'build'],
+        args: npmArgs(copyDir, ['run', 'build']),
         cwd: copyDir,
         timeoutMs: Math.min(BUILD_TIMEOUT_MS, deadlineMs - Date.now()),
         env,

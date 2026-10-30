@@ -13,7 +13,11 @@
  * build would only pass through a parent directory's install. Invariant: a
  * missing test script is a failed step under every runtime (never a silent
  * pass), a missing build script is a passing no-op, and no failing package
- * makes the steps throw.
+ * makes the steps throw. A directory without its own `package.json` fails
+ * its install without running anything (the tools would walk up to an
+ * ancestor's package), and every `npm` step is pinned to the directory with
+ * `--prefix`; the `bun` steps see the bun-runtime environment, whose `node`
+ * is the real binary.
  */
 
 import { rmSync } from 'node:fs';
@@ -23,8 +27,8 @@ import { DEFAULT_CHECK_TIMEOUT_MS } from '../../domain/acceptance';
 import { PACKAGE_INSTALL_TIMEOUT_MS, type Runtime } from '../../domain/limits';
 
 import type { CommandOutcome, PackageStepResult, PackageStepsResult } from '../../ports/check-runner';
-import { generatedCodeEnv } from '../child-env';
-import { nodeOnlyEnv } from '../node-only-env';
+import { bunRuntimeEnv, nodeOnlyEnv } from '../node-only-env';
+import { missingPackageJson, npmArgs } from '../package-guard';
 import { readPackageJson } from './package-json';
 import { missingTypeLibraries } from './type-libraries';
 import { runCommand, type Batch } from './process';
@@ -32,9 +36,9 @@ import { runCommand, type Batch } from './process';
 type StepName = PackageStepResult['step'];
 
 /** The binary and arguments one step runs under one runtime: an install without lifecycle scripts, else the package's own script. */
-function commandFor(runtime: Runtime, step: StepName): { command: string; args: string[] } {
-  if (step === 'install') return { command: runtime, args: ['install', '--ignore-scripts'] };
-  return { command: runtime, args: ['run', step] };
+function commandFor(runtime: Runtime, step: StepName, dir: string): { command: string; args: string[] } {
+  const args = step === 'install' ? ['install', '--ignore-scripts'] : ['run', step];
+  return { command: runtime, args: runtime === 'npm' ? npmArgs(dir, args) : args };
 }
 
 /** The bound of one step: an install may download, so it gets the longer timeout. */
@@ -63,13 +67,13 @@ async function runStep(
   if (step === 'test' && scripts['test'] === undefined) {
     return { runtime, step, ok: false, missingScript: true, outcome: null, detail: 'no test script in package.json' };
   }
-  const { command, args } = commandFor(runtime, step);
+  const { command, args } = commandFor(runtime, step, dir);
   const outcome = await runCommand({
     command,
     args,
     cwd: dir,
     timeoutMs: timeoutFor(step),
-    env: runtime === 'npm' ? nodeOnlyEnv(batch.home) : generatedCodeEnv(batch.home),
+    env: runtime === 'npm' ? nodeOnlyEnv(batch.home) : bunRuntimeEnv(batch.home),
     secrets: batch.secrets,
     signal: batch.signal,
   });
@@ -88,6 +92,18 @@ const STEPS: readonly StepName[] = ['install', 'build', 'test'];
 
 /** Install, build and test the package per runtime, each from a clean node_modules, stopping a runtime at its first failed step; never throws for a failing package. */
 export async function runPackageSteps(dir: string, runtimes: readonly Runtime[], batch: Batch): Promise<PackageStepsResult> {
+  const missing = missingPackageJson(dir);
+  if (missing !== null) {
+    const steps = runtimes.map((runtime): PackageStepResult => ({
+      runtime,
+      step: 'install',
+      ok: false,
+      missingScript: false,
+      outcome: null,
+      detail: missing,
+    }));
+    return { dir, runtimes, ok: false, steps };
+  }
   const pkg = await readPackageJson(dir);
   const scripts = pkg?.scripts ?? {};
   const steps: PackageStepResult[] = [];
