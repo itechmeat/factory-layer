@@ -3,13 +3,15 @@
  * happened in a run. Every variant carries the correlation base (time, run
  * id, and where they apply spec name, task id, revision, attempt, decision
  * id and kind, executor run id and node id); fields beyond `at` and `runId`
- * are present only where they apply. Executor supervision tokens never
+ * are present only where they apply. An authoring run traces its steps
+ * with the `authoring_*` events. Executor supervision tokens never
  * appear here, only in the run state.
  */
 
 import { z } from 'zod';
 
 import { CheckResultSchema } from './acceptance';
+import { AUTHORING_RESULTS, AUTHORING_STEPS } from './authoring';
 import type { PlanInvalidReason } from './plan';
 import { RunOutcomeSchema } from './run-state';
 import { TaskStateSchema } from './task';
@@ -60,6 +62,7 @@ export const TraceEventSchema = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('plan_rejected'), source: z.enum(PLAN_SOURCES), reasons: z.array(PlanInvalidReasonSchema) }),
   z.object({ ...base, type: z.literal('acceptance_produced'), checkIds: z.array(z.string()) }),
   z.object({ ...base, type: z.literal('acceptance_unavailable'), reason: z.string() }),
+  z.object({ ...base, type: z.literal('spec_examples_malformed'), problems: z.array(z.string()) }),
   z.object({
     ...base,
     type: z.literal('acceptance_check_dropped'),
@@ -108,6 +111,8 @@ export const TraceEventSchema = z.discriminatedUnion('type', [
     type: z.literal('checks_run'),
     scope: z.enum(['task', 'integration', 'delivery']),
     results: z.array(CheckResultSchema),
+    /** Failed derived checks that do not block: every spec example check (and package step) passed. */
+    advisoryCheckIds: z.array(z.string()).optional(),
   }),
   z.object({
     ...base,
@@ -144,6 +149,23 @@ export const TraceEventSchema = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('memory_failed'), phase: z.enum(['recall', 'remember']), reason: z.string() }),
   z.object({ ...base, type: z.literal('storage_failed'), reason: z.string() }),
   z.object({ ...base, type: z.literal('intervention_recorded'), note: z.string() }),
+  // playbook authoring
+  z.object({ ...base, type: z.literal('authoring_started'), taskKind: z.string() }),
+  z.object({
+    ...base,
+    type: z.literal('authoring_step'),
+    step: z.enum(AUTHORING_STEPS),
+    ok: z.boolean(),
+    playbookId: z.string().nullable(),
+    detail: z.string(),
+  }),
+  z.object({
+    ...base,
+    type: z.literal('authoring_ended'),
+    result: z.enum(AUTHORING_RESULTS),
+    playbookId: z.string().nullable(),
+    detail: z.string(),
+  }),
 ]);
 export type TraceEvent = z.infer<typeof TraceEventSchema>;
 
@@ -155,6 +177,7 @@ export type PlanProducedEvent = Extract<TraceEvent, { type: 'plan_produced' }>;
 export type PlanRejectedEvent = Extract<TraceEvent, { type: 'plan_rejected' }>;
 export type AcceptanceProducedEvent = Extract<TraceEvent, { type: 'acceptance_produced' }>;
 export type AcceptanceUnavailableEvent = Extract<TraceEvent, { type: 'acceptance_unavailable' }>;
+export type SpecExamplesMalformedEvent = Extract<TraceEvent, { type: 'spec_examples_malformed' }>;
 export type AcceptanceCheckDroppedEvent = Extract<TraceEvent, { type: 'acceptance_check_dropped' }>;
 export type DecisionStartedEvent = Extract<TraceEvent, { type: 'decision_started' }>;
 export type DecisionEndedEvent = Extract<TraceEvent, { type: 'decision_ended' }>;
@@ -181,6 +204,9 @@ export type StaleResultDiscardedEvent = Extract<TraceEvent, { type: 'stale_resul
 export type MemoryFailedEvent = Extract<TraceEvent, { type: 'memory_failed' }>;
 export type StorageFailedEvent = Extract<TraceEvent, { type: 'storage_failed' }>;
 export type InterventionRecordedEvent = Extract<TraceEvent, { type: 'intervention_recorded' }>;
+export type AuthoringStartedEvent = Extract<TraceEvent, { type: 'authoring_started' }>;
+export type AuthoringStepEvent = Extract<TraceEvent, { type: 'authoring_step' }>;
+export type AuthoringEndedEvent = Extract<TraceEvent, { type: 'authoring_ended' }>;
 
 /**
  * Lookup by event type: the payload type of each trace event variant.
@@ -193,6 +219,7 @@ export interface TraceEventTypes {
   plan_rejected: PlanRejectedEvent;
   acceptance_produced: AcceptanceProducedEvent;
   acceptance_unavailable: AcceptanceUnavailableEvent;
+  spec_examples_malformed: SpecExamplesMalformedEvent;
   acceptance_check_dropped: AcceptanceCheckDroppedEvent;
   decision_started: DecisionStartedEvent;
   decision_ended: DecisionEndedEvent;
@@ -219,4 +246,7 @@ export interface TraceEventTypes {
   memory_failed: MemoryFailedEvent;
   storage_failed: StorageFailedEvent;
   intervention_recorded: InterventionRecordedEvent;
+  authoring_started: AuthoringStartedEvent;
+  authoring_step: AuthoringStepEvent;
+  authoring_ended: AuthoringEndedEvent;
 }

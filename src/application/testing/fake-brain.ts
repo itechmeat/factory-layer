@@ -14,7 +14,9 @@ import {
   type Plan,
   type PlanInvalidReason,
   type PlanTask,
+  type Playbook,
   type PlaybookDraft,
+  type PlaybookReview,
   type RecoveryChoice,
   type Spec,
   type TaskFailure,
@@ -23,7 +25,18 @@ import {
   type UsageRecord,
   type Verdict,
 } from '../../domain';
-import { BrainError, type Brain, type BrainDecision, type Clock, type ExecutorReport, type RecalledRun, type Sleep } from '../../ports';
+import {
+  BrainError,
+  type Brain,
+  type BrainDecision,
+  type Clock,
+  type ExecutorReport,
+  type PlaybookRequest,
+  type PlaybookTrial,
+  type PlaybookValidation,
+  type RecalledRun,
+  type Sleep,
+} from '../../ports';
 
 /** The provider and model every default usage record names. */
 export const FAKE_BRAIN_PROVIDER = 'fake';
@@ -43,7 +56,9 @@ export type DecisionOf<K extends DecisionKind> = K extends 'plan' | 'correct_pla
         ? Verdict
         : K extends 'recovery'
           ? RecoveryChoice
-          : PlaybookDraft | null;
+          : K extends 'playbook_review'
+            ? PlaybookReview
+            : PlaybookDraft | null;
 
 /** One scripted answer: the decision, how long it takes, and the usage it reports. */
 export interface BrainAnswer<K extends DecisionKind> {
@@ -120,6 +135,7 @@ export class FakeBrain implements Brain {
     readonly judge: KindScript<'judge'>;
     readonly recovery: KindScript<'recovery'>;
     readonly playbook: KindScript<'playbook'>;
+    readonly playbook_review: KindScript<'playbook_review'>;
   } = {
     plan: this.kindScript('plan'),
     correct_plan: this.kindScript('correct_plan'),
@@ -129,6 +145,7 @@ export class FakeBrain implements Brain {
     judge: this.kindScript('judge'),
     recovery: this.kindScript('recovery'),
     playbook: this.kindScript('playbook'),
+    playbook_review: this.kindScript('playbook_review'),
   };
 
   /** Every call the fake saw, in call order. */
@@ -198,8 +215,17 @@ export class FakeBrain implements Brain {
     return this.decide('recovery', { task, failure, history }, signal);
   }
 
-  async proposePlaybook(taskKind: string, examples: readonly string[], signal: AbortSignal): Promise<BrainDecision<PlaybookDraft | null>> {
-    return this.decide('playbook', { taskKind, examples }, signal);
+  async proposePlaybook(request: PlaybookRequest, signal: AbortSignal): Promise<BrainDecision<PlaybookDraft | null>> {
+    return this.decide('playbook', { request }, signal);
+  }
+
+  async reviewPlaybook(
+    playbook: Playbook,
+    validation: PlaybookValidation,
+    trial: PlaybookTrial,
+    signal: AbortSignal,
+  ): Promise<BrainDecision<PlaybookReview>> {
+    return this.decide('playbook_review', { playbook, validation, trial }, signal);
   }
 
   private kindScript<K extends DecisionKind>(kind: K): KindScript<K> {

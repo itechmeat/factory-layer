@@ -43,7 +43,7 @@ import { RunOwner, StorageFailure } from './run-owner';
 import { RunSlots } from './run-slots';
 import { planRun } from './run-start';
 import { RunTrace } from './run-trace';
-import { runSchedule } from './scheduler';
+import { drainRunners, runSchedule } from './scheduler';
 import { stopAllWithoutState } from './stops';
 
 /**
@@ -278,6 +278,7 @@ export class RunFactory {
     }
     await runSchedule(ctx);
     const delivery = await deliverRun(ctx);
+    await drainRunners(ctx);
     const decided = decideOutcome(owner.state, delivery);
     const endedAt = ctx.trace.now();
     await owner.update((state) => {

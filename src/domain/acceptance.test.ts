@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 
-import { DEFAULT_CHECK_TIMEOUT_MS, AcceptanceCheckSchema, CheckResultSchema, ExpectedTextSchema, HttpCheckSchema } from './acceptance';
+import {
+  DEFAULT_CHECK_TIMEOUT_MS,
+  AcceptanceCheckSchema,
+  checkInvocation,
+  CheckResultSchema,
+  ExpectedTextSchema,
+  HttpCheckSchema,
+} from './acceptance';
 
 describe('AcceptanceCheckSchema', () => {
   test('a check without a timeout gets the default of 30 s', () => {
@@ -96,5 +103,45 @@ describe('ExpectedTextSchema', () => {
     expect(parsed.success).toBe(false);
     expect(parsed.error?.issues[0]?.message).toContain('not a valid JavaScript regular expression');
     expect(ExpectedTextSchema.safeParse({ kind: 'regex', pattern: '^wordfreq[\\s\\S]*' }).success).toBe(true);
+  });
+});
+
+describe('checkInvocation', () => {
+  test('a command check is run as its shell command, with its expected exit code', () => {
+    const check = AcceptanceCheckSchema.parse({
+      kind: 'command',
+      id: 'export-double',
+      description: 'd',
+      command: 'node -e "process.exit(1)"',
+      expectedExitCode: 0,
+    });
+    expect(checkInvocation(check)).toBe('run from the package root: node -e "process.exit(1)"; expected exit code 0');
+  });
+
+  test('a cli check names the bin entry, its arguments and its standard input', () => {
+    const check = AcceptanceCheckSchema.parse({
+      kind: 'cli',
+      id: 'temp',
+      description: 'd',
+      args: ['temp', '100 C'],
+      stdin: 'x\n',
+      expectedExitCode: 2,
+    });
+    expect(checkInvocation(check)).toBe(
+      'run from the package root: node <the bin entry named in package.json> "temp" "100 C" with standard input "x\\n"; expected exit code 2',
+    );
+  });
+
+  test('an http check names the request sent to the freshly started server', () => {
+    const check = AcceptanceCheckSchema.parse({
+      kind: 'http',
+      id: 'create',
+      description: 'd',
+      method: 'POST',
+      path: '/notes',
+      body: '{"text":"a"}',
+      expectedStatus: 201,
+    });
+    expect(checkInvocation(check)).toBe('request to the started server: POST /notes with body {"text":"a"}; expected status 201');
   });
 });

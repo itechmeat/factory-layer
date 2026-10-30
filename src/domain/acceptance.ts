@@ -4,7 +4,8 @@
  * integer timeout, 30 s by default, and may cite the spec passage it
  * derives from in `source`; a result says passed, failed or errored with
  * reasons and the redacted captured output. A check objection is the
- * Critic's reason why a derived check contradicts the spec.
+ * Critic's reason why a derived check contradicts the spec. A check's
+ * invocation is the one-line text that tells a repair agent how to run it.
  */
 
 import { z } from 'zod';
@@ -92,6 +93,27 @@ export type CommandCheck = z.infer<typeof CommandCheckSchema>;
 
 export const AcceptanceCheckSchema = z.discriminatedUnion('kind', [CliCheckSchema, HttpCheckSchema, CommandCheckSchema]);
 export type AcceptanceCheck = z.infer<typeof AcceptanceCheckSchema>;
+
+/**
+ * How a check is run and what exit code or status it expects, in one line:
+ * a repair agent reproduces a failing check from this text, since the check
+ * definitions never live in the task's tree.
+ */
+export function checkInvocation(check: AcceptanceCheck): string {
+  switch (check.kind) {
+    case 'command':
+      return `run from the package root: ${check.command}; expected exit code ${check.expectedExitCode}`;
+    case 'cli': {
+      const command = ['node <the bin entry named in package.json>', ...check.args.map((arg) => JSON.stringify(arg))].join(' ');
+      const stdin = check.stdin === undefined ? '' : ` with standard input ${JSON.stringify(check.stdin)}`;
+      return `run from the package root: ${command}${stdin}; expected exit code ${check.expectedExitCode}`;
+    }
+    case 'http': {
+      const body = check.body === undefined ? '' : ` with body ${check.body}`;
+      return `request to the started server: ${check.method} ${check.path}${body}; expected status ${check.expectedStatus}`;
+    }
+  }
+}
 
 /** One acceptance check result; produced by the CheckRunner port. */
 export const CheckResultSchema = z.object({

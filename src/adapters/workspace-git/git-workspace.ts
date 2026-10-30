@@ -3,19 +3,35 @@
  * `<workRoot>/work/<spec>`, one worktree per task and revision, integration
  * on a detached worktree merged with `--no-ff`, main moved only by an
  * update-ref compare-and-set, a conflict handed over inside the task tree,
- * a clean delivery copy per request and a delivery without `.git` and
- * `node_modules`. Every git command is bounded by the constructor timeout
- * and killed past it; every error text the adapter reports is redacted of
- * the secrets set with `setSecrets`. Every prepare sets the factory's git
- * identity and adds `.factory/` and `node_modules/` to the shared
- * `info/exclude`, so the executor's scratch files and installed packages are
- * never committed by any task tree. A delivery writes the marker file
- * `.factory-delivery`; only a missing or empty directory, or one holding
+ * a clean delivery copy per request and a delivery without `.git`,
+ * `node_modules` and `.DS_Store`. Every git command is bounded by the
+ * constructor timeout and killed past it; every error text the adapter
+ * reports is redacted of the secrets set with `setSecrets`. Every prepare sets the factory's git
+ * identity, switches the operator's hooks off and adds `.factory/`,
+ * `node_modules/` and `.DS_Store` to the shared `info/exclude`, so the
+ * executor's scratch files, installed packages and the files macOS Finder
+ * leaves are never committed by any task tree. A delivery writes the marker
+ * file `.factory-delivery`; only a missing or empty directory, or one holding
  * that marker, is ever replaced, so `--out` never wipes a user's project.
+ * The replacement is a swap: the tree is copied to a sibling directory
+ * first, then the old one is renamed aside, the new one renamed in and the
+ * old one removed, so a process killed mid-copy leaves the earlier delivery
+ * whole.
  */
 
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import {
+  appendFileSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 import { redactString } from '../../domain/redact';
 import { WorkspaceError, type AdvanceResult, type IntegrationPreparation, type TaskTree, type Workspace } from '../../ports';
@@ -25,14 +41,14 @@ import { commandText, runGit, stderrTail, type GitOutcome } from './run-git';
 const FACTORY_GIT_USER = 'factory-layer';
 const FACTORY_GIT_EMAIL = 'factory-layer@localhost';
 
-/** Directory names a delivery never copies. */
-const EXCLUDED_FROM_DELIVERY = new Set(['.git', 'node_modules']);
+/** Names a delivery never copies: git data, installed packages and macOS Finder files. */
+const EXCLUDED_FROM_DELIVERY = new Set(['.git', 'node_modules', '.DS_Store']);
 
 /** The file a delivery leaves in its directory: the proof that the factory may replace it. */
 export const DELIVERY_MARKER = '.factory-delivery';
 
-/** Lines the shared `info/exclude` must hold: executor scratch and installed packages. */
-const EXCLUDED_FROM_COMMITS = ['.factory/', 'node_modules/'];
+/** Lines the shared `info/exclude` must hold: executor scratch, installed packages and macOS Finder files. */
+const EXCLUDED_FROM_COMMITS = ['.factory/', 'node_modules/', '.DS_Store'];
 
 /**
  * Why `outDir` must not be replaced by a delivery, or `undefined` when it
@@ -100,10 +116,12 @@ export class GitWorkspace implements Workspace {
     const repoDir = this.repoDir(specName);
     mkdirSync(repoDir, { recursive: true });
     if (!existsSync(join(repoDir, '.git'))) await this.must(repoDir, ['init', '-b', 'main']);
-    // Both are idempotent and run on every prepare, so a repository from an earlier run or another tool gets them too.
+    // All are idempotent and run on every prepare, so a repository from an earlier run or another tool gets them too.
     await this.must(repoDir, ['config', 'user.name', FACTORY_GIT_USER]);
     await this.must(repoDir, ['config', 'user.email', FACTORY_GIT_EMAIL]);
     await this.must(repoDir, ['config', 'commit.gpgsign', 'false']);
+    // No hook of the operator (a global core.hooksPath, or one an init.templateDir copied in) runs on factory commits.
+    await this.must(repoDir, ['config', 'core.hooksPath', '/dev/null']);
     this.excludeScratch(repoDir);
     const head = await this.git(repoDir, ['rev-parse', '--verify', '--quiet', 'refs/heads/main']);
     if (head.exitCode !== 0) await this.must(repoDir, ['commit', '--allow-empty', '-m', 'initial commit']);
@@ -206,13 +224,20 @@ export class GitWorkspace implements Workspace {
   async deliver(copyDir: string, outDir: string): Promise<{ readonly files: number }> {
     const problem = deliveryTargetProblem(outDir);
     if (problem !== undefined) throw gitFailure(`deliver ${copyDir} to ${outDir}`, null, `refused: ${problem}`, this.secrets);
+    const fresh = join(dirname(outDir), `.${basename(outDir)}.factory-new`);
+    const stale = join(dirname(outDir), `.${basename(outDir)}.factory-old`);
     try {
-      rmSync(outDir, { recursive: true, force: true });
-      mkdirSync(outDir, { recursive: true });
-      const files = copyTree(copyDir, outDir);
-      writeFileSync(join(outDir, DELIVERY_MARKER), 'Delivered by factory-layer; the factory may replace this directory.\n');
+      rmSync(fresh, { recursive: true, force: true });
+      rmSync(stale, { recursive: true, force: true });
+      mkdirSync(fresh, { recursive: true });
+      const files = copyTree(copyDir, fresh);
+      writeFileSync(join(fresh, DELIVERY_MARKER), 'Delivered by factory-layer; the factory may replace this directory.\n');
+      if (existsSync(outDir)) renameSync(outDir, stale);
+      renameSync(fresh, outDir);
+      rmSync(stale, { recursive: true, force: true });
       return { files };
     } catch (cause) {
+      rmSync(fresh, { recursive: true, force: true });
       const detail = cause instanceof Error ? cause.message : String(cause);
       throw gitFailure(`deliver ${copyDir} to ${outDir}`, null, detail, this.secrets);
     }
@@ -228,17 +253,16 @@ export class GitWorkspace implements Workspace {
     return join(repoDir, '.trees', name);
   }
 
-  /** Adds `.factory/` and `node_modules/` to the repository's shared info/exclude, each once. */
+  /** Adds every line of `EXCLUDED_FROM_COMMITS` to the repository's shared info/exclude, each once. */
   private excludeScratch(repoDir: string): void {
     const exclude = join(repoDir, '.git', 'info', 'exclude');
     mkdirSync(dirname(exclude), { recursive: true });
-    const current = new Set(
-      readTextOrEmpty(exclude)
-        .split('\n')
-        .map((line) => line.trim()),
-    );
+    const text = readTextOrEmpty(exclude);
+    const current = new Set(text.split('\n').map((line) => line.trim()));
     const missing = EXCLUDED_FROM_COMMITS.filter((line) => !current.has(line));
-    if (missing.length > 0) appendFileSync(exclude, missing.map((line) => `${line}\n`).join(''));
+    // An existing last rule without its newline would otherwise run into the first appended one.
+    const separator = text === '' || text.endsWith('\n') ? '' : '\n';
+    if (missing.length > 0) appendFileSync(exclude, separator + missing.map((line) => `${line}\n`).join(''));
   }
 
   /** One git command of this workspace. */

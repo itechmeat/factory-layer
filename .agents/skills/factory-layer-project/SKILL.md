@@ -2,7 +2,7 @@
 name: factory-layer-project
 description: "Working rules for the factory-layer repository (a software factory: Mozaik brain, APB hands, OSB memory; TypeScript on Bun). Use at the start of ANY task in this repository: orchestration, coding, OpenSpec changes, docs, review. Covers roles, TDD, the three check tiers, the layer rule and ports, coding standards, the OpenSpec flow and the self-improvement protocol: when a rule or a gotcha is learned, this skill is updated in the same change."
 metadata:
-  version: "0.5.8"
+  version: "0.5.11"
   created: "2026-10-30"
 ---
 

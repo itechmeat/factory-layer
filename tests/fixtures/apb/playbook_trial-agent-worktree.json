@@ -1,0 +1,35 @@
+{
+  "tool": "playbook_trial",
+  "args": {
+    "id": "authored-readme-mvve7wt0-d1",
+    "params": {},
+    "instruction": "Write a short README for the module `src/domain/clock-time.ts` into the new file `docs/trial/clock-time-readme.md`."
+  },
+  "isError": false,
+  "answer": {
+    "run_id": "authored-readme-mvve7wt0-d1-1793390212375",
+    "status": "succeeded",
+    "diff": "?? docs/trial/\n",
+    "durations": [
+      {
+        "expected_seconds": 0,
+        "kind": "start",
+        "measured_seconds": 0,
+        "node": "start"
+      },
+      {
+        "expected_seconds": 600,
+        "kind": "agent_task",
+        "measured_seconds": 12,
+        "node": "write_readme"
+      },
+      {
+        "expected_seconds": 0,
+        "kind": "finish",
+        "measured_seconds": null,
+        "node": "finish"
+      }
+    ],
+    "notes": ["ran in a throwaway git worktree; changes are not applied to your workspace"]
+  }
+}

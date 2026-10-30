@@ -38,8 +38,16 @@ interface Draft {
   exitCode: number | undefined;
 }
 
-/** Find the fenced example block: [first content line index, closing fence index], or an error. */
-function findBlock(lines: readonly string[]): { start: number; end: number } | string {
+/**
+ * Find the first fenced block holding a line `isMarker` accepts: [first
+ * content line index, closing fence index], or an error naming what is
+ * missing (`what`).
+ */
+export function findFencedBlock(
+  lines: readonly string[],
+  isMarker: (line: string) => boolean,
+  what: string,
+): { start: number; end: number } | string {
   let open: number | undefined;
   for (const [index, line] of lines.entries()) {
     if (!FENCE.test(line)) continue;
@@ -47,17 +55,17 @@ function findBlock(lines: readonly string[]): { start: number; end: number } | s
       open = index;
       continue;
     }
-    if (lines.slice(open + 1, index).some((inner) => inner.startsWith('$ '))) return { start: open + 1, end: index };
+    if (lines.slice(open + 1, index).some((inner) => isMarker(inner))) return { start: open + 1, end: index };
     open = undefined;
   }
   if (open !== undefined) return `the fenced block opened at line ${open + 1} is not closed`;
-  return 'no fenced block with a `$ ` command line';
+  return `no fenced block with ${what}`;
 }
 
 /** Parse the example block of a spec. */
 export function parseExamples(markdown: string): ParsedExamples {
   const lines = markdown.split('\n');
-  const block = findBlock(lines);
+  const block = findFencedBlock(lines, (line) => line.startsWith('$ '), 'a `$ ` command line');
   if (typeof block === 'string') return { ok: false, error: block };
   const examples: SpecExample[] = [];
   let draft: Draft | undefined;

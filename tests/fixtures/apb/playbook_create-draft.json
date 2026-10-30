@@ -1,0 +1,12 @@
+{
+  "tool": "playbook_create",
+  "args": {
+    "id": "authoring-capture-trial",
+    "yaml": "schema: 2\nid: authoring-capture-trial\nname: Authoring capture trial\ndescription: Model-free draft used once to record a trial run. Start straight to finish.\nversion: 1.0.0\nparams: []\neffects:\n- fs_read\nnodes:\n- id: start\n  type: start\n- id: finish\n  type: finish\n  outcome: success\nedges:\n- from: start\n  to: finish\n"
+  },
+  "isError": false,
+  "answer": {
+    "id": "authoring-capture-trial",
+    "version": "1.0.0"
+  }
+}

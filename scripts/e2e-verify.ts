@@ -6,8 +6,11 @@
  * examples run against the package's `bin` under Node in the npm copy (the
  * command name preferring one of the bin names the package declares).
  * Every step is a bounded child process with the same allowlisted
- * environment and scratch HOME the factory gives generated code; a failing
- * step is a recorded result with its output tail, never an exception.
+ * environment and scratch HOME the factory gives generated code; the npm
+ * steps and the examples get the Node-only one (no `bun` on the PATH), as
+ * a Node-only grader would. A failing step ends its runtime (a broken
+ * build runs no tests) and is a recorded result with its output tail,
+ * never an exception.
  */
 
 import { cpSync, existsSync, mkdtempSync, readFileSync } from 'node:fs';
@@ -16,6 +19,7 @@ import { basename, join, resolve } from 'node:path';
 import { z } from 'zod';
 
 import { generatedCodeEnv, withScratchHome } from '../src/adapters/child-env';
+import { nodeOnlyEnv } from '../src/adapters/node-only-env';
 import { commandNameOf, compareExample, toNodeCommand, type SpecExample } from './e2e-examples';
 import { runBeforeDeadline, tail, type Deadline } from './e2e-process';
 
@@ -87,20 +91,22 @@ function readPackage(dir: string): PackageJson | string {
   }
 }
 
-/** Environment of the verification steps: the generated-code allowlist, no colour codes. */
-function stepEnv(home: string): Readonly<Record<string, string>> {
-  return generatedCodeEnv(home, { NO_COLOR: '1', FORCE_COLOR: '0' });
+/** Environment of the verification steps: the generated-code allowlist, Node-only unless the step runs under bun, no colour codes. */
+function stepEnv(home: string, runtime: Runtime): Readonly<Record<string, string>> {
+  const extra = { NO_COLOR: '1', FORCE_COLOR: '0' };
+  return runtime === 'bun' ? generatedCodeEnv(home, extra) : nodeOnlyEnv(home, extra);
 }
 
 async function step(
   name: string,
+  runtime: Runtime,
   argv: readonly [string, ...string[]],
   where: { readonly cwd: string; readonly home: string },
   timeoutMs: number,
   deadline: Deadline,
 ): Promise<StepResult> {
   const [command, ...args] = argv;
-  const result = await runBeforeDeadline({ command, args, cwd: where.cwd, timeoutMs, env: stepEnv(where.home) }, deadline);
+  const result = await runBeforeDeadline({ command, args, cwd: where.cwd, timeoutMs, env: stepEnv(where.home, runtime) }, deadline);
   return {
     name,
     passed: result.exitCode === 0 && !result.timedOut,
@@ -122,14 +128,14 @@ export async function verifyRuntime(runtime: Runtime, delivered: string, deadlin
   const hasTestScript = pkg.scripts?.['test'] !== undefined;
   const steps = await withScratchHome(async (home) => {
     const where = { cwd: copyDir, home };
-    const done = [await step(`${runtime} install`, [runtime, 'install', '--ignore-scripts'], where, INSTALL_TIMEOUT_MS, deadline)];
+    const done = [await step(`${runtime} install`, runtime, [runtime, 'install', '--ignore-scripts'], where, INSTALL_TIMEOUT_MS, deadline)];
     if (done.every((s) => s.passed) && pkg.scripts?.['build'] !== undefined) {
-      done.push(await step(`${runtime} run build`, [runtime, 'run', 'build'], where, BUILD_TIMEOUT_MS, deadline));
+      done.push(await step(`${runtime} run build`, runtime, [runtime, 'run', 'build'], where, BUILD_TIMEOUT_MS, deadline));
     }
     if (done.every((s) => s.passed)) {
       const testArgv: [string, ...string[]] =
         runtime === 'npm' ? ['npm', 'test'] : hasTestScript ? ['bun', 'run', 'test'] : ['bun', 'test'];
-      done.push(await step(testArgv.join(' '), testArgv, where, TEST_TIMEOUT_MS, deadline));
+      done.push(await step(testArgv.join(' '), runtime, testArgv, where, TEST_TIMEOUT_MS, deadline));
     }
     return done;
   });
@@ -161,7 +167,7 @@ async function resolveBin(
   const absolute = resolve(dir, relative);
   if (existsSync(absolute)) return absolute;
   if (pkg.scripts?.['build'] === undefined) throw new Error(`bin file ${relative} is missing and there is no build script`);
-  const build = await step('npm run build', ['npm', 'run', 'build'], where, BUILD_TIMEOUT_MS, deadline);
+  const build = await step('npm run build', 'npm', ['npm', 'run', 'build'], where, BUILD_TIMEOUT_MS, deadline);
   if (!build.passed || !existsSync(absolute)) throw new Error(`bin file ${relative} is missing after npm run build:\n${build.outputTail}`);
   return absolute;
 }
@@ -191,7 +197,7 @@ export async function runExamples(
     for (const example of examples) {
       const shell = toNodeCommand(example.command, commandName, bin);
       const run = await runBeforeDeadline(
-        { command: 'bash', args: ['-c', shell], cwd: dir, timeoutMs: EXAMPLE_TIMEOUT_MS, env: stepEnv(home) },
+        { command: 'bash', args: ['-c', shell], cwd: dir, timeoutMs: EXAMPLE_TIMEOUT_MS, env: stepEnv(home, 'npm') },
         deadline,
       );
       results.push({ command: example.command, mismatch: compareExample(example, commandName, run) });

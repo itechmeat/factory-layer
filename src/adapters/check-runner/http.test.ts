@@ -8,38 +8,47 @@ import { pgrepCount, waitFor } from './testing/process-count';
 
 afterAll(cleanupFixturePackages);
 
-const SERVER_TS = `
+const SERVER_JS = `
+const http = require('node:http');
 const port = Number(process.env.PORT);
-Bun.serve({
-  port,
-  async fetch(request) {
-    const url = new URL(request.url);
-    if (url.pathname === '/json') return Response.json({ message: 'hello' });
-    if (url.pathname === '/text') return new Response('plain body here');
-    if (url.pathname === '/echo') {
-      const text = await request.text();
-      const status = Number(url.searchParams.get('status') ?? '200');
-      return new Response(text + ':' + (request.headers.get('x-echo') ?? ''), { status });
+http
+  .createServer((request, response) => {
+    const url = new URL(request.url, 'http://127.0.0.1');
+    if (url.pathname === '/json') {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ message: 'hello' }));
+    } else if (url.pathname === '/text') {
+      response.end('plain body here');
+    } else if (url.pathname === '/echo') {
+      const chunks = [];
+      request.on('data', (chunk) => chunks.push(chunk));
+      request.on('end', () => {
+        response.writeHead(Number(url.searchParams.get('status') ?? '200'));
+        response.end(Buffer.concat(chunks).toString() + ':' + (request.headers['x-echo'] ?? ''));
+      });
+    } else if (url.pathname === '/redirect') {
+      response.writeHead(302, { location: 'http://example.com/elsewhere' });
+      response.end();
+    } else if (url.pathname === '/stall') {
+      response.write('partial');
+    } else if (url.pathname === '/huge') {
+      response.end('y'.repeat(3_000_000) + 'END');
+    } else if (url.pathname === '/slow') {
+      setTimeout(() => response.end('late'), 5000);
+    } else {
+      response.writeHead(404);
+      response.end('not found');
     }
-    if (url.pathname === '/redirect') return new Response(null, { status: 302, headers: { location: 'http://example.com/elsewhere' } });
-    if (url.pathname === '/stall') {
-      return new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('partial')); } }));
-    }
-    if (url.pathname === '/huge') return new Response('y'.repeat(3_000_000) + 'END');
-    if (url.pathname === '/slow') {
-      return new Promise((resolve) => setTimeout(() => resolve(new Response('late')), 5000));
-    }
-    return new Response('not found', { status: 404 });
-  },
-});
+  })
+  .listen(port, '127.0.0.1');
 `;
 
 /** Writes a server fixture; `start` replaces the start script. */
-async function fixtureServer(start = 'bun server.ts'): Promise<{ dir: string; marker: string }> {
+async function fixtureServer(start = 'node server.js'): Promise<{ dir: string; marker: string }> {
   const marker = `fcr-server-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
   const dir = await fixturePackage({
     'package.json': JSON.stringify({ name: 'http-fixture', private: true, scripts: { start: `${start} ${marker}` } }),
-    'server.ts': SERVER_TS,
+    'server.js': SERVER_JS,
   });
   return { dir, marker };
 }
@@ -172,6 +181,14 @@ describe('ProcessCheckRunner.runChecks, HTTP batch', () => {
     const started = performance.now();
     const results = await new ProcessCheckRunner().runChecks(dir, [httpCheck({ id: 'http-dead-1' }), httpCheck({ id: 'http-dead-2' })]);
     expect(performance.now() - started).toBeLessThan(5000);
+    expect(results.map((result) => result.status)).toEqual(['errored', 'errored']);
+    for (const result of results) expect(result.reasons).toContain('server start timeout');
+    await waitFor(async () => (await pgrepCount(marker)) === 0);
+  });
+
+  test('a Bun-only start script fails every check of the batch with the start reason', async () => {
+    const { dir, marker } = await fixtureServer('bun server.js');
+    const results = await new ProcessCheckRunner().runChecks(dir, [httpCheck({ id: 'http-bun-1' }), httpCheck({ id: 'http-bun-2' })]);
     expect(results.map((result) => result.status)).toEqual(['errored', 'errored']);
     for (const result of results) expect(result.reasons).toContain('server start timeout');
     await waitFor(async () => (await pgrepCount(marker)) === 0);

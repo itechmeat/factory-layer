@@ -1,0 +1,50 @@
+{
+  "tool": "run_status",
+  "args": {
+    "run_id": "authoring-capture-trial-1793389476955"
+  },
+  "isError": false,
+  "answer": {
+    "answer": null,
+    "children": [],
+    "continued_from": null,
+    "driver_alive": true,
+    "failure_reason": null,
+    "node_times": {
+      "start": {
+        "attempt_age_ms": null,
+        "attempt_pid": null,
+        "past_estimate": false,
+        "started_ms": 1793389476981
+      }
+    },
+    "nodes": {
+      "finish": "succeeded",
+      "start": "succeeded"
+    },
+    "outputs": {
+      "finish": "",
+      "start": ""
+    },
+    "pending_question": null,
+    "pending_review": null,
+    "pending_supervisor": null,
+    "progress": {
+      "label": null,
+      "pending_question": null,
+      "pending_questions": [],
+      "pending_review": null,
+      "pending_reviews": [],
+      "pending_supervisor": null,
+      "pending_waits": [],
+      "percent": 100,
+      "plan_key": "1.0.0|",
+      "waiting_kind": null,
+      "waiting_on": null
+    },
+    "run_id": "authoring-capture-trial-1793389476955",
+    "run_status": "succeeded",
+    "superseded_by": null,
+    "worktree": null
+  }
+}

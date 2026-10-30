@@ -7,16 +7,48 @@ import { cleanupFixturePackages, fixturePackage } from './testing/fixture-packag
 
 afterAll(cleanupFixturePackages);
 
-const CLI_TS = `
+const CLI_JS = `
 if (process.argv[2] === 'leak') process.stdout.write('token hunter2 leaked\\n');
 else process.stdout.write('ok\\n');
 `;
 
 function packageJson(scripts: Record<string, string>): string {
-  return JSON.stringify({ name: 'secret-fixture', private: true, scripts, bin: 'cli.ts' });
+  return JSON.stringify({ name: 'secret-fixture', private: true, scripts, bin: 'cli.js' });
 }
 
+/** A server whose answer is how many requests it has seen, so a check sees the state earlier checks left. */
+const COUNTER_JS = `let n = 0; require('node:http').createServer((q, s) => { n += 1; s.setHeader('content-type', 'application/json'); s.end(JSON.stringify({ n })); }).listen(Number(process.env.PORT));`;
+
 describe('ProcessCheckRunner', () => {
+  test('the spec-example HTTP checks and the derived ones each run against a fresh server, in order', async () => {
+    const dir = await fixturePackage({
+      'package.json': JSON.stringify({ name: 'counter-fixture', private: true, scripts: { start: 'node server.js' } }),
+      'server.js': COUNTER_JS,
+    });
+    const http = (id: string, n: number): ReturnType<typeof AcceptanceCheckSchema.parse> =>
+      AcceptanceCheckSchema.parse({
+        id,
+        description: id,
+        kind: 'http',
+        method: 'GET',
+        path: '/',
+        expectedStatus: 200,
+        expectedBody: { kind: 'exactJson', value: { n } },
+      });
+    const results = await new ProcessCheckRunner().runChecks(dir, [
+      http('spec-example-1', 1),
+      http('derived-1', 1),
+      http('spec-example-2', 2),
+      http('derived-2', 2),
+    ]);
+    expect(results.map((result) => [result.checkId, result.status])).toEqual([
+      ['spec-example-1', 'passed'],
+      ['derived-1', 'passed'],
+      ['spec-example-2', 'passed'],
+      ['derived-2', 'passed'],
+    ]);
+  }, 30_000);
+
   test('a batch never throws and returns one result per check', async () => {
     const dir = await fixturePackage({ 'package.json': JSON.stringify({ name: 'batch-fixture', private: true }) });
     const runner = new ProcessCheckRunner();
@@ -31,7 +63,7 @@ describe('ProcessCheckRunner', () => {
   test('setSecrets redacts the captured output of steps and checks', async () => {
     const dir = await fixturePackage({
       'package.json': packageJson({ build: 'echo built', test: 'echo token hunter2 in tests' }),
-      'cli.ts': CLI_TS,
+      'cli.js': CLI_JS,
     });
     const runner = new ProcessCheckRunner();
     runner.setSecrets(['hunter2']);

@@ -177,7 +177,7 @@ async function integrateStep(ctx: RunContext, taskId: string, lastRun: ExecutorR
   const outcome = await ctx.integrations.run(taskId, taskSignal(ctx, taskId), async () =>
     cutoffPassed(ctx) ? null : integrateTask(ctx, taskId),
   );
-  if (outcome === null || outcome.kind === 'integrated') {
+  if (outcome === null || outcome.kind === 'integrated' || outcome.kind === 'halted') {
     return { kind: 'ended' };
   }
   if (outcome.kind === 'conflict') {

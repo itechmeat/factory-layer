@@ -4,14 +4,19 @@
  * sections with JSON blocks. Plans are shown without revisions, which the
  * model does not set. The checks taken from the spec's examples are shown to
  * the Acceptance analyst (not to repeat them) and to the Critic's review (as
- * the authoritative ones). Pure text building, no IO.
+ * the authoritative ones). A playbook request carries the format example
+ * and, for a correction, the rejected draft and its issues; a playbook
+ * review shows the stored YAML with its validation and trial results.
+ * Pure text building, no IO.
  */
 
 import type { AcceptanceCheck, CheckResult } from '../../domain/acceptance';
-import type { TaskFailure, TaskHistoryEntry } from '../../domain/decisions';
+import type { Playbook, TaskFailure, TaskHistoryEntry } from '../../domain/decisions';
 import type { Plan, PlanInvalidReason, PlanTask } from '../../domain/plan';
 import type { Spec } from '../../domain/spec';
+import type { PlaybookRequest } from '../../ports/brain';
 import type { ExecutorReport } from '../../ports/executor';
+import type { PlaybookTrial, PlaybookValidation } from '../../ports/playbook-authoring';
 import type { RecalledRun } from '../../ports/memory';
 
 function section(title: string, body: string): string {
@@ -124,7 +129,28 @@ export function recoveryMessage(
   ]);
 }
 
-/** The playbook request: the kind of task and examples of it. */
-export function playbookMessage(taskKind: string, examples: readonly string[]): string {
-  return join([section('Kind of task', taskKind), section('Examples', examples.map((example) => `- ${example}`).join('\n') || 'None.')]);
+/** The playbook request: the kind of task, examples of it, the format example and any correction. */
+export function playbookMessage(request: PlaybookRequest): string {
+  const parts = [
+    section('Kind of task', request.taskKind),
+    section('Examples', request.examples.map((example) => `- ${example}`).join('\n') || 'None.'),
+    section('Playbook id', `The playbook must declare \`id: ${request.playbookId}\`.`),
+    section('Format example (a stored playbook)', `\`\`\`yaml\n${request.formatExample}\n\`\`\``),
+  ];
+  if (request.correction !== undefined) {
+    parts.push(
+      section('Your previous draft', `\`\`\`yaml\n${request.correction.draft.content}\n\`\`\``),
+      section('Issues to fix', request.correction.issues.map((issue) => `- ${issue}`).join('\n')),
+    );
+  }
+  return join(parts);
+}
+
+/** The playbook review: the stored YAML, its validation and its trial. */
+export function playbookReviewMessage(playbook: Playbook, validation: PlaybookValidation, trial: PlaybookTrial): string {
+  return join([
+    section(`Playbook \`${playbook.id}\``, `\`\`\`yaml\n${playbook.content}\n\`\`\``),
+    section('Validation', json(validation)),
+    section('Trial', json(trial)),
+  ]);
 }

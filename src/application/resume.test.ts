@@ -166,7 +166,7 @@ describe('resume of a command intent', () => {
     const ports = fakePorts();
     planOf(ports, [aTask({ id: 'only' })]);
     runsReport(ports, [[NODE_FAILED, SUCCEEDED]]);
-    recoveryAnswers(ports, [{ choice: 'rebind', profile: 'strong', hint: 'think' }]);
+    recoveryAnswers(ports, [{ choice: 'rebind', profile: 'claude', hint: 'think' }]);
     const point = at('after', (state) => commandSteps(state)[1]?.postedSeq !== undefined);
 
     await crashThenResume(ports, point);

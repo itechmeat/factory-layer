@@ -1,11 +1,12 @@
 /**
  * The CLI and command acceptance checks: a CLI check runs the package's CLI
- * entry (`bin`, else `main`) under `bun` with the check's arguments and
- * stdin; a command check runs one shell command with the package's own
+ * entry (`bin`, else `main`) as `node <entry>` with the check's arguments
+ * and stdin; a command check runs one shell command with the package's own
  * commands (its `bin` names, each run under `node`) on the PATH, as after
  * installing the package; a `bin` name that is not one plain file name is
- * skipped and named in the result. Every command sees only the allowlisted
- * environment of the batch. Invariant: a check passes
+ * skipped and named in the result. Every command sees only the Node-only
+ * environment of the batch (no `bun` on the PATH), as a Node-only grader
+ * would run the package. Invariant: a check passes
  * only when all of its expectations hold, every mismatch is named with its
  * expected and actual value, and nothing that leaves this module carries a
  * secret.
@@ -18,7 +19,8 @@ import { join, resolve } from 'node:path';
 import type { CheckResult, CliCheck, CommandCheck, ExpectedText } from '../../domain/acceptance';
 
 import type { CommandOutcome } from '../../ports/check-runner';
-import { generatedCodeEnv, type ChildEnv } from '../child-env';
+import type { ChildEnv } from '../child-env';
+import { nodeOnlyEnv } from '../node-only-env';
 import type { PackageJson } from './package-json';
 import { readPackageJson } from './package-json';
 import { redactAndCap } from './output';
@@ -101,12 +103,12 @@ export async function runCliCheck(dir: string, check: CliCheck, batch: Batch): P
     return checkResult(check.id, 'failed', ['no CLI entry: package.json has no bin and no main'], '', secrets);
   }
   const outcome = await runCommand({
-    command: 'bun',
+    command: 'node',
     args: [entry, ...check.args],
     cwd: dir,
     timeoutMs: check.timeoutMs,
     ...(check.stdin === undefined ? {} : { stdin: check.stdin }),
-    env: generatedCodeEnv(batch.home),
+    env: nodeOnlyEnv(batch.home),
     secrets,
     signal: batch.signal,
   });
@@ -147,7 +149,7 @@ async function withPackageBins<T>(dir: string, batch: Batch, body: (bins: BinEnv
   const commands = binCommands(await readPackageJson(dir));
   const skipped = commands.map(([name]) => name).filter((name) => !isSafeBinName(name));
   const safe = commands.filter(([name]) => isSafeBinName(name));
-  if (safe.length === 0) return body({ env: generatedCodeEnv(batch.home), skipped });
+  if (safe.length === 0) return body({ env: nodeOnlyEnv(batch.home), skipped });
   const shims = await mkdtemp(join(tmpdir(), 'factory-bin-'));
   try {
     for (const [name, file] of safe) {
@@ -155,7 +157,7 @@ async function withPackageBins<T>(dir: string, batch: Batch, body: (bins: BinEnv
       await writeFile(shim, `#!/bin/sh\nexec node ${JSON.stringify(resolve(dir, file))} "$@"\n`);
       await chmod(shim, 0o755);
     }
-    const env = generatedCodeEnv(batch.home);
+    const env = nodeOnlyEnv(batch.home);
     return await body({ env: { ...env, PATH: `${shims}:${env['PATH'] ?? ''}` }, skipped });
   } finally {
     await rm(shims, { recursive: true, force: true });

@@ -3,8 +3,10 @@
  * integration: the package steps (install, build when present, tests under
  * every required runtime) and every acceptance check run in a directory,
  * the steps reported as check results (`package-<runtime>-<step>`) beside the
- * acceptance results. The critic gets the task, the executor's report and
- * every result; results inform the verdict, so a scaffold may be accepted
+ * acceptance results. While the package steps and every spec example check
+ * pass, failed derived checks are advisory: traced on the check run and
+ * kept from the critic and from the task history. The critic gets the
+ * task, the executor's report and every other result; results inform the verdict, so a scaffold may be accepted
  * while feature checks still fail. A judge decision that fails every attempt
  * rejects with `brain_unavailable`. Judges of different tasks run
  * concurrently because each task judges in its own promise. A verdict that
@@ -15,14 +17,17 @@
 import type { CheckResult, PlanTask, TaskFailure } from '../domain';
 import type { ExecutorReport, PackageStepsResult } from '../ports';
 
+import { advisoryFailures } from './acceptance-review';
 import { defaultVerdict } from './decisions';
-import { discardedAsStale, halted, recordHistory, taskFailure, taskSignal, type RunContext } from './run-context';
+import { discardedAsStale, recordHistory, taskFailure, taskSignal, type RunContext } from './run-context';
 
 /** The results of one check run, and whether the package steps passed. */
 export interface CheckRun {
   readonly results: readonly CheckResult[];
   readonly acceptance: readonly CheckResult[];
   readonly packageOk: boolean;
+  /** Failed derived checks that do not block (see `advisoryFailures`); empty unless the package steps passed. */
+  readonly advisory: ReadonlySet<string>;
 }
 
 /** What the judge decided for the task: accepted, or rejected with the failure recovery starts from. */
@@ -47,12 +52,19 @@ export async function runChecksIn(ctx: RunContext, dir: string, scope: 'task' | 
   const steps = await checks.packageSteps(dir, ctx.owner.state.options.requiredRuntimes);
   const acceptance = await runAcceptance(ctx, dir);
   const results = [...packageResults(steps), ...acceptance];
+  const advisory = new Set(steps.ok ? advisoryFailures(ctx.owner.state.acceptanceChecks, acceptance) : []);
   ctx.lastChecks.set(taskId, results);
-  ctx.trace.emit({ type: 'checks_run', ...ctx.owner.correlation(taskId), scope, results: [...results] });
-  for (const failed of results.filter((result) => result.status !== 'passed')) {
+  ctx.trace.emit({
+    type: 'checks_run',
+    ...ctx.owner.correlation(taskId),
+    scope,
+    results: [...results],
+    ...(advisory.size > 0 ? { advisoryCheckIds: [...advisory] } : {}),
+  });
+  for (const failed of results.filter((result) => result.status !== 'passed' && !advisory.has(result.checkId))) {
     recordHistory(ctx, taskId, 'failed_check', `${failed.checkId}: ${failed.reasons.join('; ')}`);
   }
-  return { results, acceptance, packageOk: steps.ok };
+  return { results, acceptance, packageOk: steps.ok, advisory };
 }
 
 /** Every acceptance check of the run; a check runner that throws errors every check instead of the run. */
@@ -79,10 +91,16 @@ export async function judgeTask(ctx: RunContext, task: PlanTask, tree: string, r
   const decided = await ctx.decider.decide(
     'judge',
     owner.correlation(task.id),
-    (signal) => ctx.ports.brain.judge(task, report, checkRun.results, signal),
+    (signal) =>
+      ctx.ports.brain.judge(
+        task,
+        report,
+        checkRun.results.filter((result) => !checkRun.advisory.has(result.checkId)),
+        signal,
+      ),
     taskSignal(ctx, task.id),
   );
-  if (discardedAsStale(ctx, task.id, 'the verdict') || halted(ctx, task.id)) {
+  if (discardedAsStale(ctx, task.id, 'the verdict')) {
     return { accepted: null };
   }
   const verdict = decided.ok ? decided.decision : defaultVerdict();

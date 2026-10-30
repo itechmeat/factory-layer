@@ -1,0 +1,92 @@
+schema: 2
+id: authored-readme-mvve7wt0-d1
+name: Write a module README
+description: Reads one module's source (and tests) and writes a README describing its purpose, exports, one usage example and error behaviour, without touching any code.
+version: 1.0.0
+params: []
+defaults:
+  profile:
+    name: claude
+    scope: auto
+  max_retries: 1
+  timeout_seconds: null
+  on_failure: stop
+  require_verdict: true
+  max_parallel: 2
+supervisor: null
+trigger:
+  when:
+  - write a README for one module of a codebase
+  avoid_when:
+  - writing project-wide documentation
+  - fixing or changing module code
+  examples:
+  - write a README for src/parse.ts of a small TypeScript CLI
+  - write a README for src/format.ts from its source and tests
+  - write a README for src/store.ts of a small TypeScript HTTP service
+requires:
+  files: []
+  commands: []
+effects:
+- fs_read
+- fs_write
+nodes:
+- id: start
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: start
+- id: write_readme
+  title: Write the module README
+  expected_duration: 10m
+  inputs: null
+  outputs:
+    files: []
+    fields:
+    - summary
+  cache: null
+  type: agent_task
+  prompt: |
+    Task: {{run.instruction}}
+
+    Read the module's source file (and its tests, if they exist) to understand what it does. You may read any file in the repository needed to understand the module, but write nothing except the README.
+
+    Write the README the task asks for, at the location it specifies (default: a README next to the module, such as `src/parse.README.md` or the path given in the instruction). Cover, as applicable:
+    - what the module does and its purpose in the project
+    - what it exports, with each exported function's parameters and return value
+    - one realistic usage example (a fenced code block)
+    - how it reports or handles errors
+
+    Do not modify, create or delete any file other than the README. Do not commit.
+
+    Report: `summary` — which README you wrote and what it covers, one paragraph.
+  profile: null
+  max_retries: null
+  timeout_seconds: 900
+  workdir: null
+  isolation: null
+  connectors: []
+  interactive: false
+- id: finish
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: finish
+  outcome: success
+  prompt: null
+  profile: null
+edges:
+- from: start
+  to: write_readme
+  condition: null
+  fallback: false
+  join: null
+- from: write_readme
+  to: finish
+  condition: null
+  fallback: false
+  join: null

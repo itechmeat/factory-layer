@@ -126,7 +126,8 @@ export interface Workspace {
 
   /**
    * Copies a verified tree to the output directory without .git and
-   * node_modules, replacing earlier contents. Deadline: bounded by the
+   * node_modules, replacing earlier contents by a swap (the output is
+   * always a complete tree, never a partial copy). Deadline: bounded by the
    * caller (milliseconds). Failure: rejects with WorkspaceError; never
    * hangs.
    */

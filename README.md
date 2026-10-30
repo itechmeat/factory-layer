@@ -6,12 +6,13 @@ judges the results and recovers from failures until it delivers a small
 TypeScript project (a CLI or an HTTP API) whose tests pass. Every run leaves
 a trace of tasks, attempts, models, timings and usage.
 
-Status: the first milestone delivers a one-page CLI spec end to end.
+Status: the factory delivers one-page CLI and HTTP API specs end to end,
+with a cutoff, a hidden-run script and playbook authoring.
 
 ## Requirements
 
 1. Bun 1.4.4 (`.bun-version`).
-2. git.
+2. git 2.28 or newer, and Node.js with npm (a delivery is checked without Bun).
 3. `apb` (Agentic Playbooks) 1.0.0-beta.1 or newer on `PATH`: the factory drives coding
    work through `apb mcp`.
 4. `o2b` (Open Second Brain) 1.96.0 on `PATH`: the factory keeps its memory
@@ -19,6 +20,63 @@ Status: the first milestone delivers a one-page CLI spec end to end.
 5. The agent CLI the starter playbooks use, installed and logged in: Claude
    Code by default (see "Agent profiles" below).
 6. code-ranker on `PATH` for the full check tier.
+
+## macOS setup
+
+The factory runs on macOS (Apple Silicon or Intel) with the same commands
+as on Linux. The check gate is meant for development on Linux; on a Mac
+only the factory itself and the hidden-run script are needed.
+
+1. Install Homebrew, then the base tools:
+
+   ```bash
+   brew install git node bash
+   ```
+
+   `node` brings npm, which the factory uses to check that a delivery works
+   without Bun. `bash` replaces the bash 3.2 that macOS ships, so acceptance
+   checks written for a current bash run unchanged; keep the Homebrew `bin`
+   directory before `/bin` on `PATH` (the Homebrew installer sets it up).
+   git must be 2.28 or newer (`git init -b`); the Homebrew one is.
+
+2. Install Bun 1.4.4 with its official installer or with Homebrew
+   (`brew install oven-sh/bun/bun`), and check `bun --version`. Bun and Node
+   may share a directory: the factory never lets Bun stand in for Node.
+
+3. Install `apb` and `o2b` (versions under "Requirements") following their
+   own installation guides, and check that `apb --version` and
+   `o2b --version` answer from a new terminal.
+
+4. Install Claude Code and log in once by running `claude` and following
+   the prompt; `claude auth status` must report `"loggedIn": true`.
+
+5. Clone this repository and install the dependencies:
+
+   ```bash
+   bun install
+   ```
+
+6. Copy `.env.example` to `.env` and fill it in (see "Configuration"): the
+   brain provider (`ZAI_API_KEY`, and for the gateway
+   `FACTORY_BRAIN_GATEWAY=1` with `JIGJOY_ANTHROPIC_BASE_URL` and
+   `JIGJOY_ANTHROPIC_API_KEY`), and `FACTORY_OSB_VAULT` and
+   `FACTORY_OSB_CONFIG` for a dedicated memory vault (see "A dedicated
+   memory vault"). Use absolute paths.
+
+7. Approve the starter playbooks and the agent profile in APB, then check
+   the setup:
+
+   ```bash
+   bun run apb:bootstrap
+   bun run factory doctor
+   ```
+
+   Every doctor line must pass; a failed line names what to fix.
+
+Temporary files go under the system temporary directory (`$TMPDIR` on
+macOS). The files Finder leaves (`.DS_Store`) are never committed by a task
+and never delivered, so browsing the `work/` and output directories during
+a run is safe.
 
 ## Checks
 
@@ -36,6 +94,7 @@ bun run factory doctor                         # check the setup before a run
 bun run factory run examples/specs/wordfreq.md # build a package from a spec
 bun run factory report <runId>                 # print the report of a run
 bun run factory intervene <runId> "<note>"     # record a human intervention
+bun run factory author readme --example examples/authoring/readme-example.md
 ```
 
 `factory doctor` checks, one line each, that the brain model answers
@@ -46,16 +105,31 @@ approved at their current versions, that the agent CLI is logged in, that
 `o2b mcp` answers on the factory vault, and that git, Bun and npm are
 installed. It names what to fix for every failed check.
 
-`factory run <spec.md>` takes `--out <dir>` (default `out/<spec name>`),
-`--runtimes bun,npm` (the runtimes the delivered package must pass under)
-and `--deliver-unverified` (copy the result even when it is not verified).
+`factory run <spec.md>` takes:
+
+| Option | Effect |
+| --- | --- |
+| `--out <dir>` | Where the package is delivered (default `out/<spec name>`) |
+| `--runtimes bun,npm` | The runtimes the delivered package must pass under |
+| `--deliver-unverified` | Copy the integrated `main` to `--out` before any verification step, so a run cut off or killed during verification still leaves a package |
+| `--cutoff <time>` | `HH:MM` local time today or an ISO 8601 instant with a zone; at that moment the live executor runs are stopped (each stop confirmed within 60 s), late results are discarded and delivery starts with what is integrated |
+| `--task-concurrency <n>` | Task runs at once for this run (default 3; at most 4 executor runs at once across the process) |
+
 It prints the run id, every task transition and decision, then the
 outcome, the delivered directory and the path of the run's report. The
-run's state, trace and report live under `runs/<runId>/`; task trees live
-under `work/`. Exit codes: 0 succeeded, 1 failed, 2 usage error, 3 partial.
-The first SIGINT or SIGTERM takes the cutoff path (live runs are stopped
-and what is integrated is delivered); a second one exits at once with 130,
-since the run state is saved on every change.
+run's state, trace and report live under `runs/<runId>/`
+(`trace.jsonl`, `report.md`); task trees live under `work/`.
+`factory report <runId>` rebuilds the report from the trace alone. Exit
+codes: 0 succeeded, 1 failed, 2 usage error, 3 partial. The first SIGINT or
+SIGTERM takes the cutoff path; a second one exits at once with 130, since
+the run state is saved on every change.
+
+`factory author <kind> --example <file>` has the brain draft a playbook for
+a kind of task from one worked example, APB create, validate and trial it,
+and the brain's Critic approve or reject it. The example must be a local
+file outside `runs/`, `work/`, `out/` and `hidden/`. It prints the outcome
+and the playbook id and writes `runs/<runId>/authoring-report.md`. Exit
+codes: 0 approved, 3 none found, 1 rejected or failed, 2 usage error.
 
 ### Trust model
 
@@ -72,7 +146,8 @@ agents; both run on this machine as the operator's user. What limits them:
    files 0600), and the run state never holds a provider key.
 
 This is not a sandbox: the code can read and write whatever the user can,
-including this repository (the task trees live under `work/` inside it).
+including this repository. The task trees live under `work/` inside it
+because APB requires the trees it works in to be inside its project.
 Run the factory on a machine or account you are fine exposing to that.
 
 ### The end-to-end run
@@ -102,6 +177,45 @@ Sonnet 5.5):
 
 The costs are the ones the agents reported plus the brain calls computed
 from `config/prices.json`; the report of a run says which is which.
+
+### The hidden run
+
+```bash
+bun run hidden todo-api.md csv-tool.md --cutoff 19:15 --hard-deadline 19:22 --report-by 19:26
+```
+
+One `factory run` per spec, all at once, each delivering into
+`hidden/<spec name>/` with `--deliver-unverified`. Options (times are
+`HH:MM` local or ISO 8601): `--cutoff` (default 19:15, passed to the
+factory), `--hard-deadline` (default 19:22: a factory still running gets
+SIGTERM, its process group SIGKILL 30 s later), `--report-by` (default
+19:26: the steps after the runs end by then) and `--task-concurrency`
+(default 2). Each delivery then gets a `.gitignore` of `node_modules/`, is
+built in a copy with the built files put back, and its committable files
+are started under Node alone. The script prints one row per spec and the
+owner's steps; it never changes git state. The first Ctrl-C sends the
+factories to their cutoff path, a second kills everything.
+
+### The demo
+
+For the demo, set `FACTORY_BRAIN_GATEWAY=1` (the brain on Claude through
+the JigJoy gateway) and, to show the brain's loop live, the Mozaik Cloud
+opt-in `FACTORY_MOZAIK_CLOUD=1`; both are described under "Configuration".
+
+1. `bun run factory doctor`: every line passes, and the brain line names
+   the provider and model that answered.
+2. Start the APB dashboard in a second terminal (`apb dashboard`) and open
+   it in a browser.
+3. `bun run factory run examples/specs/demo-units.md --out <dir>`: two
+   independent commands, so two executor runs overlap on the dashboard and
+   in the trace; the run finishes in under 10 minutes.
+4. `bun run factory report <runId>`: tasks, attempts, models, timings and
+   cost.
+5. The authoring result: `runs/<runId>/authoring-report.md` of a
+   `factory author` run (above).
+6. Offline fallback: `examples/replay/demo-units/` holds the plain log
+   (`run.log`), the trace and the report of a recorded passing run of the
+   same spec.
 
 ## Configuration
 

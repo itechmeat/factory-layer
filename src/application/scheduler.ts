@@ -10,17 +10,28 @@
  * has a free permit (the permit is taken in the same tick, so the cap holds
  * exactly). It then waits for a runner to end or a lease to be released
  * (a permit freed while its task still judges is used at once) and goes
- * again. With no runner left it ends, except that: at the cutoff it stops
- * the live runs and ends the open tasks first (cutoff.ts); and when tasks
- * still wait while every permit is held by runs whose stop or release was
- * not confirmed, it checks those runs again every lookup interval and
+ * again. At the cutoff it stops waiting for the runners at once: it stops
+ * the live runs in parallel, ends the open tasks (cutoff.ts) and returns,
+ * so delivery starts while a runner may still finish a call that ignores
+ * the cutoff (its late result is discarded; `drainRunners` lets those
+ * runners settle, bounded, after delivery). With no runner left it ends,
+ * except that when tasks still wait while every permit is held by runs
+ * whose stop or release was not confirmed, it checks those runs again every lookup interval and
  * fails the waiting tasks (`slots_held`) once the run's stall limit has
  * passed without a permit coming back. A storage failure or the run's
  * abort inside a runner takes every other runner over, waits for them to
  * end, and ends the loop with that error.
  */
 
-import { EXECUTOR_LOOKUP_INTERVAL_MS, isReady, topologicalOrder } from '../domain';
+import {
+  EXECUTOR_CALL_DEADLINE_MS,
+  EXECUTOR_GRACE_MS,
+  EXECUTOR_LOOKUP_INTERVAL_MS,
+  EXECUTOR_SETTLE_WINDOW_MS,
+  EXECUTOR_STOP_DEADLINE_MS,
+  isReady,
+  topologicalOrder,
+} from '../domain';
 
 import { reachCutoff } from './cutoff';
 import { entryFor } from './resume';
@@ -44,6 +55,9 @@ export async function runSchedule(ctx: RunContext): Promise<void> {
       });
     runners.set(taskId, runner);
   };
+  const cutoffReached = new Promise<void>((resolve) => {
+    ctx.cutoff.signal.addEventListener('abort', () => resolve(), { once: true });
+  });
   let starvedSinceMs: number | null = null;
   for (;;) {
     if (fatal.length > 0) {
@@ -70,9 +84,9 @@ export async function runSchedule(ctx: RunContext): Promise<void> {
         }));
       }
     }
-    if (runners.size > 0) {
+    if (runners.size > 0 && !cutoffPassed(ctx)) {
       starvedSinceMs = null;
-      await Promise.race([...runners.values(), ctx.slots.released()]);
+      await Promise.race([...runners.values(), ctx.slots.released(), cutoffReached]);
       continue;
     }
     if (cutoffPassed(ctx)) {
@@ -85,6 +99,25 @@ export async function runSchedule(ctx: RunContext): Promise<void> {
     }
     starvedSinceMs = await waitForHeldRuns(ctx, waiting, starvedSinceMs ?? ctx.trace.nowMs());
   }
+}
+
+/**
+ * How long the run waits after delivery for the runners the cutoff left
+ * behind: long enough for a halted start to be awaited, settled by lookup
+ * and its run stopped (halted-start.ts).
+ */
+const CUTOFF_DRAIN_MS =
+  EXECUTOR_CALL_DEADLINE_MS + EXECUTOR_GRACE_MS + EXECUTOR_SETTLE_WINDOW_MS + EXECUTOR_STOP_DEADLINE_MS + EXECUTOR_GRACE_MS;
+
+/** Waits, at most CUTOFF_DRAIN_MS, for the runners still working after the cutoff; a runner past the bound is left behind. */
+export async function drainRunners(ctx: RunContext): Promise<void> {
+  if (ctx.runners.size === 0) {
+    return;
+  }
+  const bound = new AbortController();
+  const timer = ctx.ports.sleep(CUTOFF_DRAIN_MS, bound.signal).catch(() => undefined);
+  await Promise.race([Promise.allSettled(ctx.runners.values()), timer]);
+  bound.abort();
 }
 
 /** Starts a runner, at its entry step, for every task found mid-way without one. */

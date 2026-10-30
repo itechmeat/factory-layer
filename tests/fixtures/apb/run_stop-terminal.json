@@ -1,0 +1,11 @@
+{
+  "tool": "run_stop",
+  "args": {
+    "run_id": "authoring-capture-trial-1793389476955"
+  },
+  "isError": false,
+  "answer": {
+    "outcome": "already_terminal",
+    "run_id": "authoring-capture-trial-1793389476955"
+  }
+}

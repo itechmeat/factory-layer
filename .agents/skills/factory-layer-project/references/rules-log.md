@@ -217,3 +217,49 @@ Append-only. One line per learned rule: date, rule, what taught it.
     written for: the legacy smoke-note filter skips `-smoke-<ms>.md` only
     under `factory/runs/`, never under the smoke prefix. Learned when the
     memory smoke stopped recalling its own note.
+45. 2026-10-30: treat only non-warning `playbook_validate` issues as
+    blocking and keep the warnings in the trace, and check an authored
+    playbook against the deterministic authoring allowlist before create
+    and again on the YAML APB returns before approve. Learned when a probe
+    draft came back `valid: true` with a V19 warning that the adapter
+    counted as a failure, and from the review note that a spec could
+    prompt-inject an auto-approved script playbook.
+46. 2026-10-30: a model-written check may use only the Node-only tool
+    directory and portable shell: the acceptance analyst and the Critic get
+    `CHECK_SHELL_RULES` (`prompts/shared.ts`, built from
+    `NODE_ONLY_TOOLS`), and an `http` check never encodes a header rule as
+    a body expectation (it sees status and body only). HTTP checks probe
+    both `127.0.0.1` and `::1`, since a macOS server bound to `localhost`
+    listens on IPv6 only. Learned when two notes-api rehearsals delivered a
+    correct server but ended `partial` on a `curl`/`seq` command check
+    and a content-type body check.
+    The same rules forbid a check command that starts a server or another
+    background process: a third rehearsal ended `partial` on a
+    `restart-empty` command check (fixed port, `sleep 1`, `kill` on the
+    `npm` parent left the server running).
+    The Critic reviews every HTTP check in one decision, in order
+    (`reviewBatches` in `src/application/acceptance-review.ts`): HTTP
+    checks share one server, so a reviewer of a later batch of five saw a
+    `DELETE /notes/1` without the creates before it, dropped it, and the
+    next check became impossible (fourth notes-api rehearsal).
+    Owner decision the same day, to stop chasing model-written checks: the
+    spec's examples are authoritative. HTTP examples become `spec-example-N`
+    HTTP checks too (`specExampleChecks`, `src/domain/spec-http-examples.ts`,
+    shared with `scripts/e2e-http.ts`), the example and the derived HTTP
+    checks each run on their own fresh server, and while every example
+    check (and package step) passes, failed derived checks are advisory:
+    traced on `checks_run.advisoryCheckIds`, hidden from the judge, no
+    integration regression, excused at delivery without a review. A spec
+    without examples keeps them blocking.
+47. 2026-10-30: a model-written check imports a function from the
+    `package.json` `main` entry only when the spec says that entry exports
+    it (analyst rule 8, Critic acceptance review and verdict in
+    `src/adapters/brain-mozaik/prompts/`); a function the spec places in
+    its own module behind a dispatching CLI entry is checked through the
+    command. A repair run gets each failing acceptance check with its
+    invocation (`checkInvocation`, `src/domain/acceptance.ts`, used by
+    `repairRequest`), since check definitions never live in the task tree.
+    Learned when a hidden demo-units run ended `partial`: an `export-temp`
+    check imported `convertTemp` from the CLI entry, the judge blamed the
+    `temp` task, and three repair agents could not reproduce a check whose
+    command they were never given.

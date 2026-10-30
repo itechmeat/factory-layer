@@ -138,16 +138,18 @@ export function halted(ctx: RunContext, taskId: string): boolean {
 
 /**
  * True (and traced as discarded) when a result of the task arrived after a
- * re-plan took its runner over; the caller drops the result.
+ * re-plan took its runner over or after the cutoff; the caller drops the
+ * result.
  */
 export function discardedAsStale(ctx: RunContext, taskId: string, what: string): boolean {
-  if (!superseded(ctx, taskId)) {
+  if (!halted(ctx, taskId)) {
     return false;
   }
+  const after = superseded(ctx, taskId) ? 'a re-plan took the task over' : 'the cutoff';
   ctx.trace.emit({
     type: 'stale_result_discarded',
     ...ctx.owner.correlation(taskId),
-    detail: `${what} of revision ${ctx.owner.task(taskId).revision} arrived after a re-plan took the task over`,
+    detail: `${what} of revision ${ctx.owner.task(taskId).revision} arrived after ${after}`,
   });
   return true;
 }
