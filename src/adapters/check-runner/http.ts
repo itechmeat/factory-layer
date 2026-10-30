@@ -12,6 +12,9 @@
  * body is read within the check's timeout and up to HTTP_BODY_LIMIT_BYTES;
  * a stalled or oversized body fails that check only. Invariant: no HTTP
  * check runs without a started server and no server survives the batch.
+ * A directory without its own `package.json` errors every check without
+ * starting anything, and `npm` is pinned to the directory with `--prefix`,
+ * so it never starts an ancestor's package.
  */
 
 import { spawn } from 'node:child_process';
@@ -23,6 +26,7 @@ import type { CheckResult, ExpectedBody, HttpCheck } from '../../domain/acceptan
 import { HTTP_SERVER_START_TIMEOUT_MS } from '../../domain/limits';
 
 import { nodeOnlyEnv } from '../node-only-env';
+import { missingPackageJson, npmArgs } from '../package-guard';
 import { isProcessGroupAlive, killProcessGroup, trackProcessGroup, type Batch } from './process';
 import { checkResult } from './checks';
 
@@ -191,8 +195,10 @@ async function runHttpCheck(origin: string, check: HttpCheck, secrets: readonly 
 export async function runHttpBatch(dir: string, checks: readonly HttpCheck[], batch: Batch): Promise<readonly CheckResult[]> {
   if (checks.length === 0) return [];
   const { secrets } = batch;
+  const missing = missingPackageJson(dir);
+  if (missing !== null) return checks.map((check) => checkResult(check.id, 'errored', [missing], '', secrets));
   const port = await freePort();
-  const child = spawn('npm', ['run', 'start'], {
+  const child = spawn('npm', npmArgs(dir, ['run', 'start']), {
     cwd: dir,
     detached: true, // the server leads its own process group, so the stop kills its descendants too
     env: nodeOnlyEnv(batch.home, { PORT: String(port) }),

@@ -4,7 +4,9 @@
  * deadline, then each delivery is made committable (`.gitignore` with
  * `node_modules/`, built files copied back) and checked (ignored files,
  * startup on exactly the committable files), all by the report time; the
- * table and the owner's steps are printed. Invariant: the script changes
+ * table and the owner's steps are printed. A non-empty hidden/<name> is
+ * refused unless `--replace` is given and it holds the factory's delivery
+ * marker; then it is removed first. Invariant: the script changes
  * nothing in git and every wait is bounded by the hard deadline or the
  * report time, whatever the factories and the delivered packages do.
  */
@@ -180,7 +182,7 @@ export async function runHidden(options: HiddenOptions): Promise<HiddenResult> {
   }
   const scratch = mkdtempSync(join(tmpdir(), 'factory-hidden-specs-'));
   try {
-    const plans = planSpecs(options.specPaths, options.hiddenDir, scratch, new Date());
+    const plans = planSpecs(options.specPaths, options.hiddenDir, scratch, new Date(), options.replace);
     const factories = await Promise.all(plans.map((plan) => runFactory(options, plan)));
     const rows: HiddenRow[] = [];
     for (const [index, plan] of plans.entries()) {
@@ -263,7 +265,8 @@ export function installInterrupt(source: SignalSource, livePids: () => Iterable<
 }
 
 /** The usage line printed for a bad command line. */
-const USAGE = 'usage: bun run hidden <spec.md>... [--cutoff HH:MM] [--hard-deadline HH:MM] [--report-by HH:MM] [--task-concurrency N]';
+const USAGE =
+  'usage: bun run hidden <spec.md>... [--cutoff HH:MM] [--hard-deadline HH:MM] [--report-by HH:MM] [--task-concurrency N] [--replace]';
 
 /** Parses the command line or exits 2 on a bad one. */
 async function cliMain(): Promise<number> {
@@ -302,7 +305,7 @@ async function cliMain(): Promise<number> {
 export function parseCommandLine(
   argv: readonly string[],
   now: Date,
-): Pick<HiddenOptions, 'specPaths' | 'cutoff' | 'hardDeadlineMs' | 'reportByMs' | 'taskConcurrency'> {
+): Pick<HiddenOptions, 'specPaths' | 'cutoff' | 'hardDeadlineMs' | 'reportByMs' | 'taskConcurrency' | 'replace'> {
   const { values, positionals } = parseArgs({
     args: [...argv],
     options: {
@@ -310,6 +313,7 @@ export function parseCommandLine(
       'hard-deadline': { type: 'string' },
       'report-by': { type: 'string' },
       'task-concurrency': { type: 'string' },
+      replace: { type: 'boolean' },
     },
     allowPositionals: true,
   });
@@ -322,6 +326,7 @@ export function parseCommandLine(
     hardDeadlineMs: times.hardDeadlineMs,
     reportByMs: times.reportByMs,
     taskConcurrency: args['task-concurrency'],
+    replace: values.replace === true,
   };
 }
 

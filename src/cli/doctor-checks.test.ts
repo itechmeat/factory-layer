@@ -1,7 +1,9 @@
 /**
- * The doctor's bash check: bash 4 or newer is ok with its path and major
- * version, bash 3.x is a warning with the `brew install bash` hint, and a
- * missing or foreign shell fails.
+ * The doctor's bash and node checks: bash 4 or newer is ok with its path and
+ * major version, bash 3.x is a warning with the `brew install bash` hint, and
+ * a missing or foreign shell fails; node must start under the scratch HOME in
+ * the Node-only and the bun-runtime environments, a version-manager shim
+ * included.
  */
 
 import { afterAll, beforeAll, expect, test } from 'bun:test';
@@ -76,4 +78,28 @@ test('a node shim that cannot start under the scratch HOME fails with the exit c
   writeFileSync(file, '#!/bin/sh\necho "no such node" >&2\nexit 126\n');
   chmodSync(file, 0o755);
   await expect(nodeReport(bin)).rejects.toThrow('exit 126');
+});
+
+test('a node shim that needs the operator HOME starts the real node in both generated-code environments', async () => {
+  const realBin = join(scratch, 'shim-real', 'bin');
+  mkdirSync(realBin, { recursive: true });
+  const real = join(realBin, 'node');
+  writeFileSync(real, `#!/bin/sh\nif [ "$1" = "-p" ]; then echo "${real}"; else echo v24.1.0; fi\n`);
+  chmodSync(real, 0o755);
+  const shimBin = join(scratch, 'shim-home', 'bin');
+  mkdirSync(shimBin, { recursive: true });
+  writeFileSync(join(shimBin, 'node'), `#!/bin/sh\n[ -f "$HOME/.nvm-alias" ] || exit 126\nexec "${real}" "$@"\n`);
+  chmodSync(join(shimBin, 'node'), 0o755);
+  const home = join(scratch, 'operator-home');
+  mkdirSync(home, { recursive: true });
+  writeFileSync(join(home, '.nvm-alias'), 'v24\n');
+  const savedHome = process.env['HOME'];
+  process.env['HOME'] = home;
+  try {
+    const report = await nodeReport(shimBin);
+    expect(report).toContain(`v24.1.0 (`);
+    expect(report).toContain('bun runtime: v24.1.0');
+  } finally {
+    process.env['HOME'] = savedHome;
+  }
 });

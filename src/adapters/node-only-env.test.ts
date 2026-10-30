@@ -6,7 +6,7 @@ import { delimiter, dirname, join, relative } from 'node:path';
 import { withScratchHome } from './child-env';
 import { runCommand } from './check-runner/process';
 import { cleanupFixturePackages, fixturePackage } from './check-runner/testing/fixture-package';
-import { nodeOnlyEnv, toolDir } from './node-only-env';
+import { bunRuntimeEnv, nodeOnlyEnv, toolDir } from './node-only-env';
 import { bashCommand } from './shell';
 
 /** The real path of a tool on the factory's PATH; the test needs it. */
@@ -157,6 +157,34 @@ describe('a node shim that needs the operator HOME', () => {
         runCommand({ command: 'node', args: ['--version'], cwd: scratch, timeoutMs: 10_000, env: nodeOnlyEnv(scratchHome), secrets: [] }),
       );
       expect(outcome.exitCode).toBe(0);
+    } finally {
+      process.env['HOME'] = savedHome;
+      process.env['PATH'] = savedPath;
+    }
+  });
+});
+
+describe('bunRuntimeEnv with a node shim that needs the operator HOME', () => {
+  test('bun run build with node in the script starts the real node under a scratch HOME, bun still on the PATH', async () => {
+    const { shimBin } = shimLayout('shim-bun');
+    const home = mkdtempSync(join(scratch, 'operator-home-'));
+    writeFileSync(join(home, '.nvm-alias'), 'v24\n');
+    const dir = await fixturePackage({
+      'package.json': JSON.stringify({ name: 'bun-runtime-fixture', private: true, scripts: { build: 'node -e "0" && echo built' } }),
+    });
+    const savedHome = process.env['HOME'];
+    const savedPath = process.env['PATH'];
+    process.env['HOME'] = home;
+    process.env['PATH'] = [shimBin, dirname(which('bun')), factoryPath].join(delimiter);
+    try {
+      const outcome = await withScratchHome(async (scratchHome) => {
+        const env = bunRuntimeEnv(scratchHome);
+        process.env['HOME'] = savedHome;
+        process.env['PATH'] = savedPath;
+        return runCommand({ command: which('bun'), args: ['run', 'build'], cwd: dir, timeoutMs: 30_000, env, secrets: [] });
+      });
+      expect(outcome.exitCode).toBe(0);
+      expect(outcome.stdout).toContain('built');
     } finally {
       process.env['HOME'] = savedHome;
       process.env['PATH'] = savedPath;

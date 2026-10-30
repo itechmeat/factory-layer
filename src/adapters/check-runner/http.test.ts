@@ -1,4 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { AcceptanceCheckSchema, type AcceptanceCheck, type HttpCheck } from '../../domain/acceptance';
 import { ProcessCheckRunner } from './check-runner';
@@ -194,15 +196,24 @@ describe('ProcessCheckRunner.runChecks, HTTP batch', () => {
     await waitFor(async () => (await pgrepCount(marker)) === 0);
   });
 
-  test('a server that cannot be spawned errors every check with the spawn failure instead of crashing', async () => {
+  test('a missing directory errors every check with no package.json instead of crashing', async () => {
     const results = await new ProcessCheckRunner().runChecks('/nonexistent-fcr-http-dir', [
       httpCheck({ id: 'http-nospawn-1' }),
       httpCheck({ id: 'http-nospawn-2' }),
     ]);
-    // A tick later the uncaught spawn error would have crashed the test process.
     await Bun.sleep(50);
     expect(results.map((result) => result.status)).toEqual(['errored', 'errored']);
-    for (const result of results) expect(reasonOf(result)).toContain('server spawn failed');
+    for (const result of results) expect(reasonOf(result)).toContain('no package.json in /nonexistent-fcr-http-dir');
+  });
+
+  test('a directory without package.json under a server package never starts the parent server', async () => {
+    const { dir, marker } = await fixtureServer();
+    const child = join(dir, 'work');
+    mkdirSync(child);
+    const results = await new ProcessCheckRunner().runChecks(child, [httpCheck({ id: 'http-no-package' })]);
+    expect(results.map((result) => result.status)).toEqual(['errored']);
+    expect(reasonOf(results[0] ?? { reasons: [] })).toContain(`no package.json in ${child}`);
+    expect(await pgrepCount(marker)).toBe(0);
   });
 
   test('the server and its group are stopped after the batch whatever the outcome', async () => {

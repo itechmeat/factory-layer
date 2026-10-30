@@ -72,7 +72,41 @@ describe('planSpecs', () => {
     const scratch = join(root, 'scratch');
     mkdirSync(scratch);
     const spec = writeFakeSpec(root, 'deliver-js');
-    expect(() => planSpecs([spec], join(root, 'hidden'), scratch, new Date())).toThrow(/not empty/);
+    expect(() => planSpecs([spec], join(root, 'hidden'), scratch, new Date())).toThrow(
+      /not empty; move or remove the old delivery, or pass --replace/,
+    );
+  });
+
+  test('--replace removes an earlier factory delivery that holds the marker', () => {
+    const root = makeRoot();
+    const outDir = join(root, 'hidden', 'deliver-js');
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(join(outDir, '.factory-delivery'), '');
+    writeFileSync(join(outDir, 'old.js'), '\n');
+    const scratch = join(root, 'scratch');
+    mkdirSync(scratch);
+    const spec = writeFakeSpec(root, 'deliver-js');
+    const plans = planSpecs([spec], join(root, 'hidden'), scratch, new Date(), true);
+    expect(plans.map((plan) => plan.outDir)).toEqual([outDir]);
+    expect(existsSync(outDir)).toBe(false);
+  });
+
+  test('--replace refuses a directory without the marker and removes nothing, not even an earlier marked one', () => {
+    const root = makeRoot();
+    const marked = join(root, 'hidden', 'deliver-js');
+    mkdirSync(marked, { recursive: true });
+    writeFileSync(join(marked, '.factory-delivery'), '');
+    const foreign = join(root, 'hidden', 'deliver-http');
+    mkdirSync(foreign, { recursive: true });
+    writeFileSync(join(foreign, 'notes.txt'), 'mine\n');
+    const scratch = join(root, 'scratch');
+    mkdirSync(scratch);
+    const specs = [writeFakeSpec(root, 'deliver-js'), writeFakeSpec(root, 'deliver-http')];
+    expect(() => planSpecs(specs, join(root, 'hidden'), scratch, new Date(), true)).toThrow(
+      /holds no \.factory-delivery; --replace removes only a factory delivery/,
+    );
+    expect(existsSync(join(marked, '.factory-delivery'))).toBe(true);
+    expect(existsSync(join(foreign, 'notes.txt'))).toBe(true);
   });
 });
 
