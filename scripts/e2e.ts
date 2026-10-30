@@ -4,14 +4,16 @@
  * spec (default `examples/specs/wordfreq.md`) under a spec name unique to
  * this run, then verifies the delivered package independently of the
  * factory: tests under `bun` and `npm` from clean copies, and the spec
- * examples under Node. It prints the outcome, the wall time, the per-task
+ * examples under Node: CLI examples (`$ ` lines) against the package's
+ * `bin`, or HTTP examples (request lines) against the server `npm start`
+ * runs. It prints the outcome, the wall time, the per-task
  * time and cost from the run's report and the verification, and exits 0
  * only when the outcome is `succeeded`, both runtimes pass and every
  * example holds. `--delivered <dir>` skips the factory and verifies an
  * existing delivery, which then passes on the verification alone.
  *
  * The spec examples are read and validated before the factory starts, and
- * the command they invoke is taken from them. The `run id:` and `report:`
+ * for CLI examples the command they invoke is taken from them. The `run id:` and `report:`
  * lines are captured apart from the kept tail of the output, so a long run
  * still finds its report. The first Ctrl-C (SIGINT or SIGTERM) is forwarded
  * to the factory, which takes its cutoff path; a second kills every child.
@@ -28,7 +30,8 @@ import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
 
-import { commandNameOf, parseExamples } from './e2e-examples';
+import { commandNameOf, parseExamples, type SpecExample } from './e2e-examples';
+import { hasHttpExamples, parseHttpExamples, runHttpExamples, type HttpExample } from './e2e-http';
 import { killLiveProcessGroups } from '../src/adapters/check-runner/process';
 import { createDeadline, remainingMs, runBeforeDeadline, type Deadline } from './e2e-process';
 import { formatSummary, parseOutcome, parseReport, parseRunId, type FactoryReport } from './e2e-report';
@@ -94,6 +97,27 @@ const Args = z.object({
   deadlineMin: z.coerce.number().positive(),
   delivered: z.string().min(1).optional(),
 });
+
+/** The spec examples to verify the delivery against, or why they cannot be read. */
+type SpecChecks =
+  | { readonly kind: 'cli'; readonly examples: readonly SpecExample[]; readonly commandName: string }
+  | { readonly kind: 'http'; readonly examples: readonly HttpExample[] }
+  | { readonly kind: 'invalid'; readonly error: string };
+
+/** Read the examples of a spec: HTTP when it has a block of request lines, CLI otherwise. */
+export function readSpecChecks(markdown: string): SpecChecks {
+  if (hasHttpExamples(markdown)) {
+    const parsed = parseHttpExamples(markdown);
+    if (!parsed.ok) return { kind: 'invalid', error: parsed.error };
+    return parsed.examples.length === 0 ? { kind: 'invalid', error: 'no HTTP example' } : { kind: 'http', examples: parsed.examples };
+  }
+  const parsed = parseExamples(markdown);
+  if (!parsed.ok) return { kind: 'invalid', error: parsed.error };
+  const commandName = commandNameOf(parsed.examples);
+  return commandName === undefined
+    ? { kind: 'invalid', error: 'no example command' }
+    : { kind: 'cli', examples: parsed.examples, commandName };
+}
 
 /** What the factory run left behind. */
 interface FactoryRun {
@@ -196,12 +220,10 @@ async function main(): Promise<number> {
   }
 
   const specPath = resolve(args.spec);
-  const parsed = parseExamples(readFileSync(specPath, 'utf8'));
-  const examples = parsed.ok ? parsed.examples : [];
-  const commandName = commandNameOf(examples);
-  if (!parsed.ok || commandName === undefined) {
+  const checks = readSpecChecks(readFileSync(specPath, 'utf8'));
+  if (checks.kind === 'invalid') {
     // Checked before the factory starts: a run whose examples cannot be verified would be spent for nothing.
-    console.error(`e2e: the spec examples cannot be verified: ${parsed.ok ? 'no example command' : parsed.error}`);
+    console.error(`e2e: the spec examples cannot be verified: ${checks.error}`);
     clearTimeout(watchdog);
     return 2;
   }
@@ -227,19 +249,23 @@ async function main(): Promise<number> {
   } else {
     for (const runtime of RUNTIMES) runtimes.push(await verifyRuntime(runtime, delivered, deadline));
     const npmCopy = runtimes.find((r) => r.runtime === 'npm')?.copyDir;
-    if (npmCopy !== undefined) exampleResults = await runExamples(npmCopy, examples, commandName, deadline);
+    if (npmCopy !== undefined) {
+      exampleResults =
+        checks.kind === 'http'
+          ? await runHttpExamples(npmCopy, checks.examples, deadline)
+          : await runExamples(npmCopy, checks.examples, checks.commandName, deadline);
+    }
   }
 
   const verified =
     runtimes.length === RUNTIMES.length &&
     runtimes.every((r) => r.passed) &&
-    examples.length > 0 &&
-    exampleResults.length === examples.length &&
+    exampleResults.length === checks.examples.length &&
     exampleResults.every((e) => e.mismatch === null);
   const passed = verified && (factory === undefined || outcome === 'succeeded');
   console.log(
     formatSummary({
-      specName: factory?.specName ?? commandName,
+      specName: factory?.specName ?? basename(specPath, '.md'),
       runId,
       outcome,
       factoryWallMs: factory?.durationMs,

@@ -7,10 +7,12 @@
  * (acceptance-review: every example check passed and the check contradicts
  * the spec) does not count as failed. The tree is copied to the output directory
  * (without `.git` and `node_modules`) only when every package step passed,
- * or when `deliverUnverified` is set, in which case the outcome still
- * records the failed verification. The outcome is `succeeded` when every
- * task is integrated, the copy is verified and every acceptance check
- * passes; `partial` when a verified tree was delivered with failed tasks
+ * or when `deliverUnverified` is set: then the clean `main` is copied
+ * before any verification step (design D2), so a process killed while
+ * verifying still leaves it, a passing verification replaces it with the
+ * verified tree, and the outcome still records a failed verification. The
+ * outcome is `succeeded` when every task is integrated, the copy is
+ * verified and every acceptance check passes; `partial` when a verified tree was delivered with failed tasks
  * (even none integrated), failed checks, unavailable acceptance, or an empty
  * set of acceptance checks (the Brain port's contract: an empty answer caps
  * the outcome at `partial`); `failed` when no verified tree was delivered.
@@ -46,25 +48,29 @@ export async function deliverRun(ctx: RunContext): Promise<DeliveryResult> {
     state.intents = [...state.intents.filter((intent) => intent.kind !== 'deliver'), { kind: 'deliver', at }];
   });
   const copy = await ports.workspace.cleanCopy(spec.name);
+  const outDir = options.outDir ?? null;
+  const copyOut = async (): Promise<void> => {
+    if (outDir === null) {
+      return;
+    }
+    const delivered = await ports.workspace.deliver(copy.dir, outDir);
+    ctx.trace.emit({ type: 'delivery_step', step: 'copy', runtime: null, ok: true, detail: `${delivered.files} files copied` });
+  };
+  if (options.deliverUnverified) {
+    await copyOut();
+  }
   const steps = await ports.checks.packageSteps(copy.dir, options.requiredRuntimes);
   for (const step of steps.steps) {
     ctx.trace.emit({ type: 'delivery_step', step: step.step, runtime: step.runtime, ok: step.ok, detail: ctx.trace.redact(step.detail) });
   }
   const results = await runAcceptance(ctx, copy.dir);
   ctx.trace.emit({ type: 'checks_run', scope: 'delivery', results: [...results] });
-  const excused = await excusedAtDelivery(
-    { spec, brain: ports.brain, decider: ctx.decider, trace: ctx.trace },
-    owner.state.acceptanceChecks,
-    results,
-  );
+  const excused = excusedAtDelivery(ctx.trace, owner.state.acceptanceChecks, results);
   const verified = steps.ok;
-  const outDir = options.outDir ?? null;
-  let copied = false;
-  if (outDir !== null && (verified || options.deliverUnverified)) {
-    const delivered = await ports.workspace.deliver(copy.dir, outDir);
-    copied = true;
-    ctx.trace.emit({ type: 'delivery_step', step: 'copy', runtime: null, ok: true, detail: `${delivered.files} files copied` });
+  if (verified) {
+    await copyOut();
   }
+  const copied = outDir !== null && (verified || options.deliverUnverified);
   ctx.trace.emit({ type: 'delivery_done', copied, outDir: copied ? outDir : null, verified });
   await owner.removeIntents((intent) => intent.kind === 'deliver' && intent.at === at);
   return {

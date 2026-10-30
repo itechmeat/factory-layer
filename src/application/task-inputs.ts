@@ -2,11 +2,12 @@
  * What a task's executor runs are started with: the playbook per run role
  * (the task's own playbook, `repair` for a repair run, `integrate` for a
  * conflict resolution) and the typed start inputs (task text with any hint,
- * owned paths, failing checks with their reasons, conflicting paths), and
+ * owned paths, failing checks with their reasons and invocations,
+ * conflicting paths), and
  * the follow-up run of a failed one in the same tree.
  */
 
-import type { ExecutorRunRef } from '../domain';
+import { checkInvocation, type ExecutorRunRef } from '../domain';
 import type { ExecutorStartInputs } from '../ports';
 
 import type { DispatchRequest } from './dispatch';
@@ -29,17 +30,24 @@ export function taskRequest(ctx: RunContext, taskId: string): DispatchRequest {
   return { taskId, role: 'task', playbook: ctx.owner.planTask(taskId).playbook, inputs: baseInputs(ctx, taskId, null) };
 }
 
-/** A repair run in the task's tree, with the hint and the failing checks (and their last reasons). */
+/**
+ * A repair run in the task's tree, with the hint and the failing checks:
+ * each with its last reasons and, for an acceptance check, how to run it
+ * (the definitions never live in the tree, so without it the agent cannot
+ * reproduce the failure).
+ */
 export function repairRequest(
   ctx: RunContext,
   taskId: string,
   repair: { readonly hint: string | null; readonly failingCheckIds: readonly string[] },
 ): DispatchRequest {
   const last = ctx.lastChecks.get(taskId) ?? [];
-  const failingChecks = repair.failingCheckIds.map((id) => ({
-    id,
-    reason: last.find((result) => result.checkId === id)?.reasons.join('; ') ?? 'failed',
-  }));
+  const checks = ctx.owner.state.acceptanceChecks;
+  const failingChecks = repair.failingCheckIds.map((id) => {
+    const reason = last.find((result) => result.checkId === id)?.reasons.join('; ') ?? 'failed';
+    const check = checks.find((candidate) => candidate.id === id);
+    return { id, reason: check === undefined ? reason : `${reason}; ${checkInvocation(check)}` };
+  });
   return {
     taskId,
     role: 'repair',

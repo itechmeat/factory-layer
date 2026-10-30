@@ -2,15 +2,18 @@
  * The spec as the ground truth of the acceptance checks: the spec's own
  * shell examples (`$ command`, the expected output, an optional
  * `(exit code N)` line, inside fenced blocks) become command checks without
- * any model, a model-derived check must quote the spec in its `source`, and
+ * any model, followed by its HTTP examples as HTTP checks
+ * (`spec-http-examples.ts`), a model-derived check must quote the spec in its `source`, and
  * a derived check that runs the same invocation as an example but expects
  * something else contradicts that example. Examples that need a network
- * service (`curl`, `wget`, a URL, `localhost`) are left to the model. Pure
- * text rules, no IO.
+ * service (`curl`, `wget`, a URL, `localhost`) are left to the model. A
+ * malformed HTTP example block gives no checks and is named by
+ * `specExampleProblems`, so the caller reports it. Pure text rules, no IO.
  */
 
 import type { AcceptanceCheck, CommandCheck, ExpectedText } from './acceptance';
 import { DEFAULT_CHECK_TIMEOUT_MS } from './acceptance';
+import { hasHttpExamples, httpExampleChecks, parseHttpExamples } from './spec-http-examples';
 
 /** The id prefix of the checks taken from the spec's examples; derived checks may not use it. */
 export const SPEC_EXAMPLE_ID_PREFIX = 'spec-example-';
@@ -125,6 +128,20 @@ export function extractExampleChecks(markdown: string): CommandCheck[] {
     if (check !== null) checks.push(check);
   }
   return checks;
+}
+
+/** Every example check of the spec: the shell examples, then the HTTP examples in order (none when their block is malformed). */
+export function specExampleChecks(markdown: string): AcceptanceCheck[] {
+  const shell = extractExampleChecks(markdown);
+  const http = parseHttpExamples(markdown);
+  return http.ok ? [...shell, ...httpExampleChecks(http.examples, SPEC_EXAMPLE_ID_PREFIX, shell.length + 1)] : shell;
+}
+
+/** Why an example block of the spec gives no checks: today only a malformed HTTP block. Empty when every block reads. */
+export function specExampleProblems(markdown: string): string[] {
+  if (!hasHttpExamples(markdown)) return [];
+  const http = parseHttpExamples(markdown);
+  return http.ok ? [] : [`HTTP examples are malformed and give no checks: ${http.error}`];
 }
 
 // ---- quotes ----

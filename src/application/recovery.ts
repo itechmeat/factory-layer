@@ -30,6 +30,9 @@ import { discardedAsStale, halted, recordHistory, taskSignal, type RunContext } 
 import { stopRun, treeBlocked } from './stops';
 import { followUpRequest } from './task-inputs';
 
+/** Agent profiles a rebind may name; the demo and the hidden run use Claude Code only. */
+const ALLOWED_REBIND_PROFILES: readonly string[] = ['claude'];
+
 /** A failed attempt to recover: the failure, the task's last run and whether that run is still live. */
 export interface RecoveryCase {
   readonly taskId: string;
@@ -64,7 +67,7 @@ export async function recover(ctx: RunContext, rc: RecoveryCase): Promise<Recove
     (signal) => ctx.ports.brain.chooseRecovery(owner.planTask(rc.taskId), rc.failure, ctx.history.get(rc.taskId) ?? [], signal),
     taskSignal(ctx, rc.taskId),
   );
-  if (discardedAsStale(ctx, rc.taskId, 'the recovery choice') || halted(ctx, rc.taskId)) {
+  if (discardedAsStale(ctx, rc.taskId, 'the recovery choice')) {
     return ENDED;
   }
   const choice = decided.ok ? decided.decision : defaultRecovery();
@@ -102,6 +105,15 @@ async function apply(ctx: RunContext, rc: RecoveryCase, choice: RecoveryChoice, 
       return repair(ctx, rc, null, choice.failingCheckIds);
     case 'retry':
     case 'rebind':
+      if (choice.choice === 'rebind' && !ALLOWED_REBIND_PROFILES.includes(choice.profile)) {
+        ctx.trace.emit({
+          type: 'recovery_chosen',
+          ...ctx.owner.correlation(rc.taskId),
+          choice: 'repair',
+          detail: `rebind to ${choice.profile} refused: only ${ALLOWED_REBIND_PROFILES.join(', ')} allowed`,
+        });
+        return repair(ctx, rc, choice.hint, []);
+      }
       if (live && rc.ref !== null && rc.failure.nodeId !== null) {
         return postCommand(ctx, rc.ref, choice, rc.failure.nodeId);
       }

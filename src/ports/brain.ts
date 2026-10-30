@@ -1,22 +1,38 @@
 /**
  * The Brain port: the typed decisions the application may ask of the brain
  * (plan, correction, re-plan, acceptance checks and their review, verdict,
- * recovery choice, playbook proposal). The brain only decides; it never orchestrates and it
+ * recovery choice, playbook proposal and its review). The brain only decides; it never orchestrates and it
  * never sees an adapter or SDK type.
  */
 
 import type { AcceptanceCheck, CheckObjection, CheckResult } from '../domain/acceptance';
-import type { PlaybookDraft, RecoveryChoice, TaskFailure, TaskHistoryEntry, Verdict } from '../domain/decisions';
+import type { PlaybookReview } from '../domain/authoring';
+import type { Playbook, PlaybookDraft, RecoveryChoice, TaskFailure, TaskHistoryEntry, Verdict } from '../domain/decisions';
 import type { Plan, PlanInvalidReason, PlanTask } from '../domain/plan';
 import type { Spec } from '../domain/spec';
 import type { UsageRecord } from '../domain/usage';
 import type { ExecutorReport } from './executor';
+import type { PlaybookTrial, PlaybookValidation } from './playbook-authoring';
 import type { RecalledRun } from './memory';
 
 /** One brain answer: the typed decision and the usage records it incurred. */
 export interface BrainDecision<D> {
   readonly decision: D;
   readonly usage: readonly UsageRecord[];
+}
+
+/**
+ * What the Architect gets to propose a playbook: the kind of task, examples
+ * of it, a stored playbook's YAML as the format example, and, for the one
+ * correction, the rejected draft with the issues it must fix.
+ */
+export interface PlaybookRequest {
+  readonly taskKind: string;
+  readonly examples: readonly string[];
+  readonly formatExample: string;
+  /** The id the draft must declare. */
+  readonly playbookId: string;
+  readonly correction?: { readonly draft: PlaybookDraft; readonly issues: readonly string[] };
 }
 
 /** Typed brain failure; carries the usage records already incurred. */
@@ -124,11 +140,26 @@ export interface Brain {
   ): Promise<BrainDecision<RecoveryChoice>>;
 
   /**
-   * Proposes a playbook for a kind of task from examples; `null` means the
-   * brain found none. Deadline: bounded by the caller at
+   * Proposes a playbook for a kind of task from examples, declaring the
+   * request's id; `null` means the brain found none. Deadline: bounded by the caller at
    * BRAIN_DECISION_DEADLINE_MS (milliseconds), retried up to
    * BRAIN_DECISION_RETRIES times; the signal aborts early. Failure: rejects
    * with BrainError carrying the usage incurred so far; never hangs.
    */
-  proposePlaybook(taskKind: string, examples: readonly string[], signal: AbortSignal): Promise<BrainDecision<PlaybookDraft | null>>;
+  proposePlaybook(request: PlaybookRequest, signal: AbortSignal): Promise<BrainDecision<PlaybookDraft | null>>;
+
+  /**
+   * The Critic's review of a stored playbook draft from its validation and
+   * trial results: approve or reject, with at least one reason. Deadline:
+   * bounded by the caller at BRAIN_DECISION_DEADLINE_MS (milliseconds),
+   * retried up to BRAIN_DECISION_RETRIES times; the signal aborts early.
+   * Failure: rejects with BrainError carrying the usage incurred so far;
+   * never hangs.
+   */
+  reviewPlaybook(
+    playbook: Playbook,
+    validation: PlaybookValidation,
+    trial: PlaybookTrial,
+    signal: AbortSignal,
+  ): Promise<BrainDecision<PlaybookReview>>;
 }

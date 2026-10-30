@@ -8,7 +8,8 @@
  * message says when none is allowed; a rebind names only a configured
  * profile; a derived acceptance check that does not quote the spec or
  * takes an example check id is refused; the acceptance review may object
- * only to its candidate checks.
+ * only to its candidate checks; a playbook review needs a reason and sees
+ * the trial output redacted.
  */
 
 import { describe, expect, test } from 'bun:test';
@@ -289,5 +290,35 @@ describe('acceptance', () => {
     const unknown = recording({ objections: [{ checkId: 'ghost', reason: 'no' }] });
     const brain = new MozaikBrain({ decider: unknown.decider, costs: COSTS, replanBudget: 1 });
     await expect(brain.reviewAcceptance(spec, [], [check], [], AbortSignal.timeout(1000))).rejects.toThrow('unknown check id ghost');
+  });
+});
+
+describe('playbook review', () => {
+  const playbook = { id: 'authored-readme-x-d1', name: 'Readme', content: 'id: authored-readme-x-d1' };
+
+  test('a review without reasons is refused back to the model', () => {
+    const brain = new MozaikBrain({ decider: submitting({ verdict: 'approve', reasons: [] }), costs: COSTS, replanBudget: 1 });
+    return expect(
+      brain.reviewPlaybook(playbook, { ok: true, problems: [], warnings: [] }, { ok: true, output: '' }, AbortSignal.timeout(1000)),
+    ).rejects.toThrow('reasons');
+  });
+
+  test('the trial output reaches the Critic redacted of the secrets', async () => {
+    const requests: DecisionRequest<unknown>[] = [];
+    const decider: Decider = {
+      decide: async <T>(request: DecisionRequest<T>): Promise<DecisionResult<T>> => {
+        requests.push(request);
+        return { value: request.schema.parse({ verdict: 'reject', reasons: ['no'] }), usage: [] };
+      },
+    };
+    const brain = new MozaikBrain({ decider, costs: COSTS, replanBudget: 1, secrets: ['sk-leaked-in-trial'] });
+    await brain.reviewPlaybook(
+      playbook,
+      { ok: true, problems: [], warnings: [] },
+      { ok: true, output: 'printed sk-leaked-in-trial' },
+      AbortSignal.timeout(1000),
+    );
+    expect(requests[0]?.role).toBe('critic');
+    expect(requests[0]?.user).not.toContain('sk-leaked-in-trial');
   });
 });

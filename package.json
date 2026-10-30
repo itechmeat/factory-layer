@@ -26,7 +26,8 @@
     "audit": "bun audit",
     "hooks:install": "lefthook install",
     "apb:bootstrap": "bun run scripts/apb-bootstrap.ts",
-    "e2e": "bun run scripts/e2e.ts"
+    "e2e": "bun run scripts/e2e.ts",
+    "hidden": "bun run scripts/hidden-run.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

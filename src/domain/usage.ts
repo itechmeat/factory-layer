@@ -10,7 +10,16 @@ import { z } from 'zod';
 // ---- decision kinds (correlation labels for records and trace events) ----
 
 /** What the brain was deciding when a usage record was incurred. */
-export type DecisionKind = 'plan' | 'correct_plan' | 'replan' | 'acceptance' | 'acceptance_review' | 'judge' | 'recovery' | 'playbook';
+export type DecisionKind =
+  | 'plan'
+  | 'correct_plan'
+  | 'replan'
+  | 'acceptance'
+  | 'acceptance_review'
+  | 'judge'
+  | 'recovery'
+  | 'playbook'
+  | 'playbook_review';
 
 export const DECISION_KINDS: readonly DecisionKind[] = [
   'plan',
@@ -21,6 +30,7 @@ export const DECISION_KINDS: readonly DecisionKind[] = [
   'judge',
   'recovery',
   'playbook',
+  'playbook_review',
 ];
 
 // ---- usage, price, cost ----

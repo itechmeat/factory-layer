@@ -3,7 +3,7 @@
  * one decision attempt on the agent of its role (the Architect plans,
  * corrects, re-plans and proposes playbooks; the Acceptance analyst derives
  * the checks beyond the spec's examples; the Critic reviews derived checks,
- * judges and chooses recoveries) with the role's
+ * judges, chooses recoveries and reviews authored playbooks) with the role's
  * prompt, the user message of the decision and its narrowed submit schema;
  * core-owned fields (plan revisions) are filled in here. The caller bounds
  * and retries the decision; this adapter only maps.
@@ -27,16 +27,18 @@
 import type { z } from 'zod';
 
 import type { AcceptanceCheck, CheckObjection, CheckResult } from '../../domain/acceptance';
-import type { PlaybookDraft, RecoveryChoice, TaskFailure, TaskHistoryEntry, Verdict } from '../../domain/decisions';
+import type { PlaybookReview } from '../../domain/authoring';
+import type { Playbook, PlaybookDraft, RecoveryChoice, TaskFailure, TaskHistoryEntry, Verdict } from '../../domain/decisions';
 import { BRAIN_DECISION_DEADLINE_MS } from '../../domain/limits';
 import type { Plan, PlanInvalidReason, PlanTask } from '../../domain/plan';
 import type { Spec } from '../../domain/spec';
-import { extractExampleChecks } from '../../domain/spec-examples';
+import { specExampleChecks } from '../../domain/spec-examples';
 import { redactJson } from '../../domain/redact';
 import { computeCost, type DecisionKind, type Usage, type UsageRecord } from '../../domain/usage';
-import { type Brain, type BrainDecision, BrainError } from '../../ports/brain';
+import { type Brain, type BrainDecision, BrainError, type PlaybookRequest } from '../../ports/brain';
 import type { CostTable } from '../../ports/cost-table';
 import type { ExecutorReport } from '../../ports/executor';
+import type { PlaybookTrial, PlaybookValidation } from '../../ports/playbook-authoring';
 import type { Clock } from '../../ports/index';
 import type { RecalledRun } from '../../ports/memory';
 import type { CloudGuardScope } from './cloud-guard';
@@ -49,6 +51,7 @@ import {
   judgeMessage,
   planMessage,
   playbookMessage,
+  playbookReviewMessage,
   recoveryMessage,
   replanMessage,
   reviewMessage,
@@ -58,6 +61,7 @@ import {
   acceptanceSubmissionSchema,
   completePlan,
   PlanSubmissionSchema,
+  PlaybookReviewSubmissionSchema,
   PlaybookSubmissionSchema,
   AGENT_PROFILES,
   recoverySubmissionSchema,
@@ -167,7 +171,7 @@ export class MozaikBrain implements Brain {
       kind: 'acceptance',
       role: 'acceptance_analyst',
       system: ROLE_PROMPTS.acceptance_analyst.acceptance,
-      user: acceptanceMessage(spec, extractExampleChecks(spec.markdown)),
+      user: acceptanceMessage(spec, specExampleChecks(spec.markdown)),
       schema: acceptanceSubmissionSchema(spec.markdown),
       signal,
     });
@@ -222,13 +226,30 @@ export class MozaikBrain implements Brain {
     });
   }
 
-  proposePlaybook(taskKind: string, examples: readonly string[], signal: AbortSignal): Promise<BrainDecision<PlaybookDraft | null>> {
+  proposePlaybook(request: PlaybookRequest, signal: AbortSignal): Promise<BrainDecision<PlaybookDraft | null>> {
     return this.#decide({
       kind: 'playbook',
       role: 'architect',
       system: ROLE_PROMPTS.architect.playbook,
-      user: playbookMessage(taskKind, examples),
+      user: playbookMessage(request),
       schema: PlaybookSubmissionSchema,
+      signal,
+    });
+  }
+
+  /** The trial output may carry raw agent output, so it is redacted before it reaches the model. */
+  reviewPlaybook(
+    playbook: Playbook,
+    validation: PlaybookValidation,
+    trial: PlaybookTrial,
+    signal: AbortSignal,
+  ): Promise<BrainDecision<PlaybookReview>> {
+    return this.#decide({
+      kind: 'playbook_review',
+      role: 'critic',
+      system: ROLE_PROMPTS.critic.playbookReview,
+      user: playbookReviewMessage(playbook, validation, redactJson(trial, this.#secrets)),
+      schema: PlaybookReviewSubmissionSchema,
       signal,
     });
   }

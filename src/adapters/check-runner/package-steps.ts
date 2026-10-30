@@ -1,12 +1,14 @@
 /**
  * The package steps of the check runner: install, build (when the package
  * has a build script) and the package's own test script, per requested
- * runtime. An install is bounded by PACKAGE_INSTALL_TIMEOUT_MS, build and
+ * runtime, in that order; a failing step ends its runtime, so a broken
+ * build fails the runtime without running its tests. An install is bounded by PACKAGE_INSTALL_TIMEOUT_MS, build and
  * test by DEFAULT_CHECK_TIMEOUT_MS. Every runtime installs into a clean
  * `node_modules`, so no runtime reuses another one's install. An install
  * never runs the package's lifecycle scripts (`--ignore-scripts`): the
  * build is its own step. Every step sees only the allowlisted environment
- * of the batch. An install that leaves a type library the package's
+ * of the batch; the `npm` steps see the Node-only one (no `bun` on the
+ * PATH), as a Node-only grader would run them. An install that leaves a type library the package's
  * `tsconfig.json` names out of its own `node_modules` fails, naming it: the
  * build would only pass through a parent directory's install. Invariant: a
  * missing test script is a failed step under every runtime (never a silent
@@ -22,6 +24,7 @@ import { PACKAGE_INSTALL_TIMEOUT_MS, type Runtime } from '../../domain/limits';
 
 import type { CommandOutcome, PackageStepResult, PackageStepsResult } from '../../ports/check-runner';
 import { generatedCodeEnv } from '../child-env';
+import { nodeOnlyEnv } from '../node-only-env';
 import { readPackageJson } from './package-json';
 import { missingTypeLibraries } from './type-libraries';
 import { runCommand, type Batch } from './process';
@@ -66,7 +69,7 @@ async function runStep(
     args,
     cwd: dir,
     timeoutMs: timeoutFor(step),
-    env: generatedCodeEnv(batch.home),
+    env: runtime === 'npm' ? nodeOnlyEnv(batch.home) : generatedCodeEnv(batch.home),
     secrets: batch.secrets,
     signal: batch.signal,
   });
@@ -80,18 +83,21 @@ async function runStep(
   return { runtime, step, ok, missingScript: false, outcome, detail: detailFor(step, runtime, outcome) };
 }
 
-/** Install, build and test the package per runtime, each from a clean node_modules; never throws for a failing package. */
+/** The steps of one runtime, in order. */
+const STEPS: readonly StepName[] = ['install', 'build', 'test'];
+
+/** Install, build and test the package per runtime, each from a clean node_modules, stopping a runtime at its first failed step; never throws for a failing package. */
 export async function runPackageSteps(dir: string, runtimes: readonly Runtime[], batch: Batch): Promise<PackageStepsResult> {
   const pkg = await readPackageJson(dir);
   const scripts = pkg?.scripts ?? {};
   const steps: PackageStepResult[] = [];
   for (const runtime of runtimes) {
     rmSync(join(dir, 'node_modules'), { recursive: true, force: true });
-    steps.push(
-      await runStep(dir, runtime, 'install', scripts, batch),
-      await runStep(dir, runtime, 'build', scripts, batch),
-      await runStep(dir, runtime, 'test', scripts, batch),
-    );
+    for (const name of STEPS) {
+      const result = await runStep(dir, runtime, name, scripts, batch);
+      steps.push(result);
+      if (!result.ok) break;
+    }
   }
   return { dir, runtimes, ok: steps.every((step) => step.ok), steps };
 }

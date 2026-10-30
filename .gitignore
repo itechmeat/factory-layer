@@ -13,6 +13,13 @@ work/
 runs/
 out/
 
+# Hidden-run deliveries: build output under hidden/ is committed, dependencies are not
+!hidden/**
+hidden/**/node_modules/
+hidden/**/.env
+hidden/**/.env.*
+!hidden/**/.env.example
+
 # Tool caches
 .zvec-grep/
 .code-ranker/

@@ -1,8 +1,12 @@
 /**
- * The HTTP acceptance checks: one server per batch, started with the
- * package's start script on a free loopback port passed in `PORT`, waited
- * for with a bounded TCP probe, asked one request per check, and killed
- * with its whole process group whatever the outcome. The server sees only
+ * The HTTP acceptance checks: one server per batch, started with `npm run
+ * start` in the Node-only environment (no `bun` on the PATH) on a free
+ * loopback port passed in `PORT`, waited for with a bounded TCP probe of
+ * both loopback addresses (`127.0.0.1` and `::1`: on macOS `localhost`
+ * resolves to `::1` first, so a server bound to it listens on IPv6 only),
+ * and requests go to the address that answered,
+ * asked one request per check, and killed with its whole process group
+ * whatever the outcome. The server sees only
  * the allowlisted environment of the batch, and a request never leaves the
  * server's origin (redirects are judged as responses, never followed). The
  * body is read within the check's timeout and up to HTTP_BODY_LIMIT_BYTES;
@@ -18,7 +22,7 @@ import { z } from 'zod';
 import type { CheckResult, ExpectedBody, HttpCheck } from '../../domain/acceptance';
 import { HTTP_SERVER_START_TIMEOUT_MS } from '../../domain/limits';
 
-import { generatedCodeEnv } from '../child-env';
+import { nodeOnlyEnv } from '../node-only-env';
 import { isProcessGroupAlive, killProcessGroup, trackProcessGroup, type Batch } from './process';
 import { checkResult } from './checks';
 
@@ -74,10 +78,14 @@ export async function freePort(): Promise<number> {
   });
 }
 
+/** The loopback addresses a server may listen on, in probe order. */
+const LOOPBACK_HOSTS = ['127.0.0.1', '::1'] as const;
+type LoopbackHost = (typeof LOOPBACK_HOSTS)[number];
+
 /** One TCP connect attempt; true when the port accepts. */
-function tryConnect(port: number): Promise<boolean> {
+function tryConnect(port: number, host: LoopbackHost): Promise<boolean> {
   return new Promise((resolve) => {
-    const socket = connect({ port, host: '127.0.0.1' });
+    const socket = connect({ port, host });
     socket.once('connect', () => {
       socket.destroy();
       resolve(true);
@@ -86,13 +94,13 @@ function tryConnect(port: number): Promise<boolean> {
   });
 }
 
-/** Polls until the port accepts, the start deadline passes, or the server process group dies. */
-async function waitUntilListening(port: number, leaderPid: number, timeoutMs: number): Promise<boolean> {
+/** Polls until the port accepts on a loopback address (returned), the start deadline passes, or the server process group dies. */
+async function waitUntilListening(port: number, leaderPid: number, timeoutMs: number): Promise<LoopbackHost | null> {
   const deadline = performance.now() + timeoutMs;
   for (;;) {
-    if (await tryConnect(port)) return true;
-    if (!isProcessGroupAlive(leaderPid)) return false; // the start script exited: it will never listen
-    if (performance.now() >= deadline) return false;
+    for (const host of LOOPBACK_HOSTS) if (await tryConnect(port, host)) return host;
+    if (!isProcessGroupAlive(leaderPid)) return null; // the start script exited: it will never listen
+    if (performance.now() >= deadline) return null;
     await Bun.sleep(SERVER_START_POLL_MS);
   }
 }
@@ -147,11 +155,10 @@ export function matchBody(expected: ExpectedBody, body: string): string | null {
 }
 
 /** Sends one check's request and judges status and body. */
-async function runHttpCheck(port: number, check: HttpCheck, secrets: readonly string[]): Promise<CheckResult> {
+async function runHttpCheck(origin: string, check: HttpCheck, secrets: readonly string[]): Promise<CheckResult> {
   const init: RequestInit = { method: check.method, signal: AbortSignal.timeout(check.timeoutMs), redirect: 'manual' };
   if (check.headers !== undefined) init.headers = check.headers;
   if (check.body !== undefined) init.body = check.body;
-  const origin = `http://127.0.0.1:${port}`;
   const url = new URL(check.path, origin);
   if (url.origin !== origin) {
     return checkResult(check.id, 'errored', [`the path ${JSON.stringify(check.path)} leaves the server's origin`], '', secrets);
@@ -185,10 +192,10 @@ export async function runHttpBatch(dir: string, checks: readonly HttpCheck[], ba
   if (checks.length === 0) return [];
   const { secrets } = batch;
   const port = await freePort();
-  const child = spawn('bun', ['run', 'start'], {
+  const child = spawn('npm', ['run', 'start'], {
     cwd: dir,
     detached: true, // the server leads its own process group, so the stop kills its descendants too
-    env: generatedCodeEnv(batch.home, { PORT: String(port) }),
+    env: nodeOnlyEnv(batch.home, { PORT: String(port) }),
     stdio: 'ignore',
   });
   trackProcessGroup(child);
@@ -204,11 +211,13 @@ export async function runHttpBatch(dir: string, checks: readonly HttpCheck[], ba
       const reason = await Promise.race([spawnError, Bun.sleep(SPAWN_ERROR_GRACE_MS).then(() => 'server spawn failed: no process id')]);
       return checks.map((check) => checkResult(check.id, 'errored', [reason], '', secrets));
     }
-    if (!(await waitUntilListening(port, pid, HTTP_SERVER_START_TIMEOUT_MS))) {
+    const host = await waitUntilListening(port, pid, HTTP_SERVER_START_TIMEOUT_MS);
+    if (host === null) {
       return checks.map((check) => checkResult(check.id, 'errored', ['server start timeout'], '', secrets));
     }
+    const origin = host === '::1' ? `http://[::1]:${port}` : `http://${host}:${port}`;
     const results: CheckResult[] = [];
-    for (const check of checks) results.push(await runHttpCheck(port, check, secrets));
+    for (const check of checks) results.push(await runHttpCheck(origin, check, secrets));
     return results;
   } finally {
     batch.signal?.removeEventListener('abort', onAbort);

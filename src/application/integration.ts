@@ -8,7 +8,10 @@
  * rejection. A conflict is handed over to the task's own tree: `main` is
  * merged into the task branch there and an `integrate` run resolves it; the
  * hand-over counts as a recovery attempt. Integrations run one at a time in
- * execution order (integration-queue.ts). The integrate intent holds the
+ * execution order (integration-queue.ts). From the cutoff on `main` is
+ * closed: an integration whose checks were still running then does not
+ * advance it (`halted`, the cutoff fails the task), and an advance already
+ * under way is awaited by the cutoff. The integrate intent holds the
  * acceptance results `main` gets as its baseline, so a resume that finds
  * `main` already at the integration result marks the task integrated
  * without merging again (task 3.12).
@@ -18,7 +21,7 @@ import { budgetReport, type CheckResult, type RunIntent, type TaskFailure } from
 
 import { runChecksIn } from './judge';
 import type { RecoveryNext } from './live-command';
-import { taskFailure, type RunContext } from './run-context';
+import { cutoffPassed, taskFailure, type RunContext } from './run-context';
 import { treeBlocked } from './stops';
 import { integrateRequest } from './task-inputs';
 
@@ -26,7 +29,8 @@ import { integrateRequest } from './task-inputs';
 export type IntegrationOutcome =
   | { readonly kind: 'integrated' }
   | { readonly kind: 'conflict'; readonly paths: readonly string[] }
-  | { readonly kind: 'rejected'; readonly failure: TaskFailure };
+  | { readonly kind: 'rejected'; readonly failure: TaskFailure }
+  | { readonly kind: 'halted' };
 
 /** How often a moved `main` is retried before the integration counts as failed. */
 const MAIN_MOVED_RETRIES = 1;
@@ -47,7 +51,7 @@ export async function integrateTask(ctx: RunContext, taskId: string): Promise<In
     }
     ctx.trace.emit({ type: 'merge_produced', ...owner.correlation(taskId), commit: prepared.commit, baseCommit: prepared.base });
     const checks = await runChecksIn(ctx, prepared.tree, 'integration', taskId);
-    const regressed = regressions(owner.state.lastMainChecks, checks.acceptance);
+    const regressed = regressions(owner.state.lastMainChecks, checks.acceptance).filter((checkId) => !checks.advisory.has(checkId));
     const failedPackage = checks.results.filter((result) => result.checkId.startsWith('package-') && result.status !== 'passed');
     if (!checks.packageOk || regressed.length > 0) {
       const failing = [...failedPackage.map((result) => result.checkId), ...regressed];
@@ -68,18 +72,33 @@ export async function integrateTask(ctx: RunContext, taskId: string): Promise<In
       base: prepared.base,
       checks: [...checks.acceptance],
     };
-    await owner.addIntent(intent);
-    const advanced = await ports.workspace.advanceMain(specName, prepared.commit, prepared.base);
-    if (!advanced.ok) {
-      await owner.removeIntents((candidate) => candidate.kind === 'integrate' && candidate.taskId === taskId);
-      if (tries < MAIN_MOVED_RETRIES) {
-        continue;
-      }
+    const advanced = await ctx.integrations.advanceMain(
+      () => cutoffPassed(ctx),
+      () => advanceTo(ctx, intent),
+    );
+    if (advanced === null) {
+      return { kind: 'halted' };
+    }
+    if (advanced) {
+      return { kind: 'integrated' };
+    }
+    if (tries >= MAIN_MOVED_RETRIES) {
       return { kind: 'rejected', failure: taskFailure(ctx, taskId, { reason: 'main_moved', detail: 'main moved during the integration' }) };
     }
-    await markIntegrated(ctx, intent);
-    return { kind: 'integrated' };
   }
+}
+
+/** Moves main to the integration result under the intent; true when it moved and the task is integrated, false when main moved first. */
+async function advanceTo(ctx: RunContext, intent: IntegrateIntent): Promise<boolean> {
+  const { owner, ports } = ctx;
+  await owner.addIntent(intent);
+  const advanced = await ports.workspace.advanceMain(owner.state.spec.name, intent.commit, intent.base);
+  if (!advanced.ok) {
+    await owner.removeIntents((candidate) => candidate.kind === 'integrate' && candidate.taskId === intent.taskId);
+    return false;
+  }
+  await markIntegrated(ctx, intent);
+  return true;
 }
 
 /** An integrate intent, as saved. */

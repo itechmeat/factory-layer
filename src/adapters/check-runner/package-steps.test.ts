@@ -103,11 +103,31 @@ describe('ProcessCheckRunner.packageSteps', () => {
     expect(result.steps).toHaveLength(6);
   });
 
-  test('a missing directory resolves with a failed result instead of throwing', async () => {
+  test('a missing directory resolves with a failed install and no later step instead of throwing', async () => {
     const result = await new ProcessCheckRunner().packageSteps('/nonexistent-fcr-dir-xyz', ['bun']);
     expect(result.ok).toBe(false);
-    expect(result.steps).toHaveLength(3);
-    expect(result.steps.some((step) => !step.ok)).toBe(true);
+    expect(result.steps.map((step) => `${step.step}:${String(step.ok)}`)).toEqual(['install:false']);
+  });
+
+  test('a broken build fails the runtime without running its tests', async () => {
+    const dir = await fixturePackage({ 'package.json': packageJson({ build: 'echo build-broke; exit 2', test: 'echo tests-ok' }) });
+    const result = await new ProcessCheckRunner().packageSteps(dir, ['npm']);
+
+    expect(result.ok).toBe(false);
+    expect(result.steps.map((step) => `${step.step}:${String(step.ok)}`)).toEqual(['install:true', 'build:false']);
+    expect(result.steps[1]?.outcome?.stdout).toContain('build-broke');
+  });
+
+  test('npm steps run without bun on the PATH, so a Bun-only test script fails under npm only', async () => {
+    const dir = await fixturePackage({
+      'package.json': packageJson({ test: 'bun test' }),
+      'selfcheck.test.ts': SELFCHECK_TS,
+    });
+    const result = await new ProcessCheckRunner().packageSteps(dir, ['bun', 'npm']);
+
+    const tests = result.steps.filter((step) => step.step === 'test');
+    expect(tests.map((step) => `${step.runtime}:${String(step.ok)}`)).toEqual(['bun:true', 'npm:false']);
+    expect(tests[1]?.outcome?.exitCode).toBe(127);
   });
 });
 

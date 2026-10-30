@@ -2,7 +2,7 @@
 /**
  * CLI layer: the `factory` command and the composition root, the only place
  * that picks adapters and wires them into the application. It parses the
- * command line, dispatches `run`, `report`, `intervene` and `doctor`, and
+ * command line, dispatches `run`, `report`, `intervene`, `author` and `doctor`, and
  * turns their outcome into the exit code (2 for a usage error, including a
  * run id that is not one safe directory name, a spec that is empty, not a
  * file or not named as a slug, and an `--out` the factory did not create;
@@ -27,6 +27,7 @@ import { RunFactory } from '../application/index';
 import { resolveRunLimits, RunOptionsSchema } from '../domain/limits';
 import { makeSpec, type Spec } from '../domain/spec';
 import { type Command, parseArgs, USAGE, UsageError } from './args';
+import { authorCommand } from './author';
 import { compose, envSecrets, type Env } from './compose';
 import { filterMozaikWarning } from './console-filter';
 import { runDoctor } from './doctor';
@@ -76,6 +77,7 @@ async function run(command: Extract<Command, { name: 'run' }>, io: CliIo): Promi
     deliverUnverified: command.deliverUnverified,
     outDir,
     ...(command.runtimes === undefined ? {} : { requiredRuntimes: [...command.runtimes] }),
+    ...(command.taskConcurrency === undefined ? {} : { runTaskConcurrency: command.taskConcurrency }),
   };
   const limits = resolveRunLimits(RunOptionsSchema.parse(base));
   const cutoff = new AbortController();
@@ -88,6 +90,7 @@ async function run(command: Extract<Command, { name: 'run' }>, io: CliIo): Promi
   }
   try {
     const runId = newRunId(spec.name, systemClock.now());
+    if (command.cutoffAtMs !== undefined) io.write(`cutoff: ${new Date(command.cutoffAtMs).toString()}`);
     const result = await runCommand(
       {
         // The keys come from the environment on every start and are never saved with the run.
@@ -97,7 +100,7 @@ async function run(command: Extract<Command, { name: 'run' }>, io: CliIo): Promi
         write: io.write,
         exit: io.exit,
       },
-      { runId, spec, options: base },
+      { runId, spec, options: base, cutoffAtMs: command.cutoffAtMs ?? null },
     );
     try {
       const file = await writeRunReport(ROOT, result.runId, io.write);
@@ -142,6 +145,8 @@ export async function main(argv: readonly string[], io: CliIo): Promise<number> 
         write: io.write,
       });
     }
+    case 'author':
+      return authorCommand({ root: ROOT, env: io.env, write: io.write, taskKind: command.taskKind, examplePath: command.examplePath });
     case 'doctor':
       return runDoctor(doctorChecks(ROOT, io.env), io.write);
   }

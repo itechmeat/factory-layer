@@ -6,6 +6,7 @@ import {
   extractExampleChecks,
   isSpecExampleCheckId,
   runsNoPackageCommand,
+  specExampleProblems,
   unquotedParts,
 } from './spec-examples';
 
@@ -130,5 +131,20 @@ describe('runsNoPackageCommand', () => {
     ).toBeNull();
     expect(runsNoPackageCommand(check({ kind: 'cli', args: [], expectedExitCode: 0 }), examples)).toBeNull();
     expect(runsNoPackageCommand(check({ kind: 'command', command: 'true', expectedExitCode: 0 }), [])).toBeNull();
+  });
+});
+
+describe('specExampleProblems', () => {
+  test('names a malformed HTTP example block instead of dropping it silently', () => {
+    const markdown = ['# api', '', '```', 'GET /items', '```', ''].join('\n');
+    const problems = specExampleProblems(markdown);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('HTTP examples');
+    expect(problems[0]).toContain('GET /items');
+  });
+
+  test('is empty for a spec with no HTTP block or a well formed one', () => {
+    expect(specExampleProblems(SPEC)).toEqual([]);
+    expect(specExampleProblems(['# api', '', '```', 'GET /items', '=> 200', '```', ''].join('\n'))).toEqual([]);
   });
 });

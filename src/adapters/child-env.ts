@@ -24,13 +24,19 @@ function pick(names: readonly string[]): Record<string, string> {
   return picked;
 }
 
+/** A UTF-8 locale every release of the platform ships: older macOS has no `C.UTF-8`, a minimal Linux no `en_US.UTF-8`. */
+export function fallbackLang(platform: NodeJS.Platform): string {
+  return platform === 'darwin' ? 'en_US.UTF-8' : 'C.UTF-8';
+}
+
 /**
  * The environment of a generated-code process: PATH and LANG from the
- * factory, the scratch `home`, `CI=1` (no watch modes, no prompts) and the
- * caller's `extra` variables (a PORT, a PATH with the package's commands).
+ * factory (LANG falls back to a UTF-8 locale of the platform), the scratch
+ * `home`, `CI=1` (no watch modes, no prompts) and the caller's `extra`
+ * variables (a PORT, a PATH with the package's commands).
  */
 export function generatedCodeEnv(home: string, extra: ChildEnv = {}): ChildEnv {
-  return { LANG: 'C.UTF-8', ...pick(['PATH', 'LANG']), HOME: home, CI: '1', ...extra };
+  return { LANG: fallbackLang(process.platform), ...pick(['PATH', 'LANG']), HOME: home, CI: '1', ...extra };
 }
 
 /** The environment of a git command: what git reads for its own configuration, never a key, and no prompts. */

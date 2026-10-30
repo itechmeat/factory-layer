@@ -48,7 +48,7 @@ describe('recovery', () => {
     const ports = { ...base, store: new RecordingStore({ clock: base.clock }) };
     planOf(ports, [aTask({ id: 'only' })]);
     runsReport(ports, [[NODE_FAILED, SUCCEEDED]]);
-    recoveryAnswers(ports, [{ choice: 'rebind', profile: 'strong', hint: 'use the strong model' }]);
+    recoveryAnswers(ports, [{ choice: 'rebind', profile: 'claude', hint: 'use the strong model' }]);
 
     const result = await run(ports);
 
@@ -63,7 +63,7 @@ describe('recovery', () => {
       .at(-1);
     expect(lastCommand).toMatchObject({
       choice: 'rebind',
-      profile: 'strong',
+      profile: 'claude',
       hint: 'use the strong model',
       steps: [
         { step: 'append_context', postedSeq: 1 },
@@ -74,6 +74,21 @@ describe('recovery', () => {
     expect(ports.executor.starts).toHaveLength(1);
     expect(result.outcome).toBe('partial');
     expect((await ports.store.load('run-r'))?.tasks['only']).toEqual({ revision: 1, state: 'integrated', attemptsUsed: 2 });
+  });
+
+  test('a rebind to a profile other than claude becomes a repair run with the same hint', async () => {
+    const ports = fakePorts();
+    planOf(ports, [aTask({ id: 'only' })]);
+    runsReport(ports, [[NODE_FAILED, SUCCEEDED], [SUCCEEDED]]);
+    recoveryAnswers(ports, [{ choice: 'rebind', profile: 'codex', hint: 'try another agent' }]);
+
+    await run(ports);
+
+    expect(ports.executor.commands.map((command) => command.kind)).not.toContain('rebind_profile');
+    const refused = ports.sink.events.find((event) => event.type === 'recovery_chosen' && event.choice === 'repair');
+    expect(refused).toMatchObject({ detail: 'rebind to codex refused: only claude allowed' });
+    expect(ports.executor.starts).toHaveLength(2);
+    expect(JSON.stringify(ports.executor.starts[1]?.inputs)).toContain('try another agent');
   });
 
   test('a command step the executor does not take falls back to a stop and a repair run within the same attempt', async () => {
@@ -109,7 +124,23 @@ describe('recovery', () => {
     const events = ports.sink.events.map((event) => (event.type === 'executor_stopped' ? `stopped:${event.purpose}` : event.type));
     expect(events.indexOf('stopped:recovery')).toBeLessThan(events.lastIndexOf('executor_started'));
     expect(ports.executor.starts[1]?.playbook).toBe('repair');
-    expect(ports.executor.starts[1]?.inputs.failingChecks).toEqual([{ id: 'help', reason: 'failed' }]);
+    expect(ports.executor.starts[1]?.inputs.failingChecks).toEqual([
+      {
+        id: 'help',
+        reason: 'failed; run from the package root: node <the bin entry named in package.json> "--help"; expected exit code 0',
+      },
+    ]);
+  });
+
+  test('a repair of a check the run does not define passes only the failure reason', async () => {
+    const ports = fakePorts();
+    planOf(ports, [aTask({ id: 'only' })]);
+    runsReport(ports, [[NODE_FAILED]]);
+    recoveryAnswers(ports, [{ choice: 'repair', failingCheckIds: ['package-bun-test'] }]);
+
+    await run(ports);
+
+    expect(ports.executor.starts[1]?.inputs.failingChecks).toEqual([{ id: 'package-bun-test', reason: 'failed' }]);
   });
 
   test('a repair after a finished run waits until the stop confirms the driver released the tree', async () => {
@@ -152,7 +183,7 @@ describe('recovery', () => {
     const ports = fakePorts();
     planOf(ports, [aTask({ id: 'only' })]);
     runsReport(ports, [[{ kind: 'terminal', status: 'aborted' }]]);
-    recoveryAnswers(ports, [{ choice: 'rebind', profile: 'strong', hint: 'think harder' }]);
+    recoveryAnswers(ports, [{ choice: 'rebind', profile: 'claude', hint: 'think harder' }]);
 
     await run(ports);
 

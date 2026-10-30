@@ -41,7 +41,15 @@ injected through a port.
    HTTP-only, so the factory has its own stdio MCP client. Function tools
    carry `strict: false` explicitly (mandatory in 4.2.0).
 2. **APB** through `apb mcp` (stdio), execution mode `cli` only, host
-   fallback off. Never changed from here.
+   fallback off. Never changed from here. `playbook_validate` reports
+   warnings (severity `warning`, such as V19 for a node without
+   `expected_duration`) in the same `issues` list as errors: only the
+   non-warning issues block. A trial run is attributed by `runs_list`
+   (`playbook` is the draft id, `started_ts` wall-clock ms); `run_status`
+   can still report `driver_alive: true` just after a run ended, so a run
+   `runs_list` shows terminal needs no stop. Authored playbooks pass a
+   deterministic allowlist (`src/domain/authoring.ts`) before create and
+   again before approve.
 3. **OSB** through its MCP server (stdio), a dedicated vault for the factory.
 4. **Brain model** configuration comes from the environment (see
    `.env.example`): Claude through the JigJoy gateway

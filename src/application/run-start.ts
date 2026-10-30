@@ -10,13 +10,15 @@
  * settled against the spec (acceptance-review: the spec's example checks
  * first, contradicting or objected derived checks dropped) while planning
  * goes on. An acceptance decision that fails every attempt leaves the run
- * with only the example checks and marks it `acceptance_unavailable`.
+ * with only the example checks and marks it `acceptance_unavailable`. An
+ * example block that gives no checks (a malformed HTTP block) is traced as
+ * `spec_examples_malformed`.
  *
  * The planning signal includes the run's cutoff: a cutoff reached during
  * planning cancels the decisions, and RunFactory ends the run as failed.
  */
 
-import { validatePlan, type AcceptanceCheck, type Plan, type Spec } from '../domain';
+import { specExampleProblems, validatePlan, type AcceptanceCheck, type Plan, type Spec } from '../domain';
 import type { Brain, Memory, Sleep } from '../ports';
 
 import { exampleChecks, settleChecks } from './acceptance-review';
@@ -77,6 +79,9 @@ async function deriveChecks(
 ): Promise<{ readonly ok: boolean; readonly checks: readonly AcceptanceCheck[]; readonly detail: string }> {
   const { spec, brain, decider } = info;
   const examples = exampleChecks(spec);
+  const problems = specExampleProblems(spec.markdown);
+  if (problems.length > 0)
+    info.trace.emit({ type: 'spec_examples_malformed', problems: problems.map((problem) => info.trace.redact(problem)) });
   const derived = await decider.decide('acceptance', {}, (decisionSignal) => brain.deriveAcceptance(spec, decisionSignal), signal);
   if (!derived.ok) return { ok: false, checks: examples, detail: derived.failure.detail };
   return { ok: true, checks: await settleChecks(info, examples, derived.decision, signal), detail: '' };

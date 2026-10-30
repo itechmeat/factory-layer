@@ -3,8 +3,15 @@
  * implementing the `PlaybookAuthoring` port.
  * Each method is one APB tool call with an MCP timeout: `playbook_list`,
  * `playbook_get` (full detail, for the YAML), `playbook_create`,
- * `playbook_validate`, `playbook_trial` and `playbook_approve`. Answers are
- * validated; a failed call rejects with an `ApbAuthoringError` naming the
+ * `playbook_validate`, `playbook_trial` and `playbook_approve`; stopping
+ * trial runs lists the runs (`runs_list`) and stops each live one of the
+ * playbook started since the given instant (`run_stop`, then `run_status`
+ * until confirmed). A trial run is attributed by its `playbook` (the draft
+ * id) and `started_ts` (wall-clock ms), as recorded under
+ * `tests/fixtures/apb/runs_list-trial.json`; a run `runs_list` already shows
+ * terminal needs no stop (`run_status` may still report its driver alive
+ * right after it ended). Answers are
+ * validated (a validation issue APB marks as a warning does not block); a failed call rejects with an `ApbAuthoringError` naming the
  * playbook and the cause, while validation, trial and approval report their
  * verdict as a result. APB writes created playbooks into the project's
  * `.apb/playbooks/`, trials them in a detached worktree of the project HEAD,
@@ -14,15 +21,19 @@
 import { z } from 'zod';
 
 import { messageOf } from '../mcp-stdio/errors';
-import type { ApbToolCaller } from './apb-tool-caller';
+import { type ApbToolCaller, leftUntil } from './apb-tool-caller';
+import { RunsListSchema, RunStatusSchema, TERMINAL_RUN_STATUSES } from './apb-run-schemas';
+import { stopAndConfirm } from './stop-run';
 import type { Playbook, PlaybookDraft, PlaybookRef } from '../../domain/decisions';
-import type { PlaybookAuthoring, PlaybookTrial, PlaybookValidation } from '../../ports/playbook-authoring';
+import type { PlaybookAuthoring, PlaybookTrial, PlaybookValidation, TrialRunStop, TrialStopResult } from '../../ports/playbook-authoring';
 
 /** Timeouts of the authoring calls, in milliseconds. */
 export interface ApbAuthoringTimeouts {
   readonly callMs?: number;
   /** A trial blocks until the trial run ends. */
   readonly trialMs?: number;
+  /** The pause between two status polls while a stop is confirmed. */
+  readonly pollIntervalMs?: number;
 }
 
 /** A playbook store call failed. */
@@ -43,17 +54,28 @@ const ValidateSchema = z.looseObject({ valid: z.boolean(), issues: z.array(z.unk
 const TrialSchema = z.union([
   z.looseObject({ rejected: z.string() }).transform((answer) => ({ kind: 'rejected' as const, reason: answer.rejected })),
   z
-    .looseObject({ run_id: z.string(), status: z.string(), notes: z.unknown().optional(), diff: z.unknown().optional() })
-    .transform((answer) => ({ kind: 'ran' as const, status: answer.status, notes: answer.notes, diff: answer.diff })),
+    .looseObject({ run_id: z.string(), status: z.string() })
+    .transform((answer) => ({ kind: 'ran' as const, status: answer.status, answer })),
 ]);
 const ApproveSchema = z.looseObject({ trusted: z.boolean() });
 const DraftIdSchema = z.looseObject({ id: z.string().min(1) });
+/** `runs_list` with the status each run had when listed. */
+const TrialRunsSchema = RunsListSchema.element.extend({ status: RunStatusSchema });
 
-/** One validation issue as text. */
+const IssueSchema = z.looseObject({ message: z.string(), code: z.string().optional(), severity: z.string().optional() });
+
+/** One validation issue as text, with its APB code when it has one. */
 function issueText(issue: unknown): string {
   if (typeof issue === 'string') return issue;
-  const message = z.looseObject({ message: z.string() }).safeParse(issue);
-  return message.success ? message.data.message : JSON.stringify(issue);
+  const parsed = IssueSchema.safeParse(issue);
+  if (!parsed.success) return JSON.stringify(issue);
+  return parsed.data.code === undefined ? parsed.data.message : `${parsed.data.code}: ${parsed.data.message}`;
+}
+
+/** True for an issue APB marks as a warning; anything else blocks. */
+function isWarning(issue: unknown): boolean {
+  const parsed = IssueSchema.safeParse(issue);
+  return parsed.success && parsed.data.severity === 'warning';
 }
 
 /** The playbook store over one `apb mcp` connection. */
@@ -61,12 +83,14 @@ export class ApbAuthoring implements PlaybookAuthoring {
   private readonly caller: () => Promise<ApbToolCaller>;
   private readonly callMs: number;
   private readonly trialMs: number;
+  private readonly pollIntervalMs: number;
 
   /** `caller` gives the live `apb mcp` connection (the executor's session may share it). */
   constructor(caller: () => Promise<ApbToolCaller>, timeouts: ApbAuthoringTimeouts = {}) {
     this.caller = caller;
     this.callMs = timeouts.callMs ?? 30_000;
     this.trialMs = timeouts.trialMs ?? 900_000;
+    this.pollIntervalMs = timeouts.pollIntervalMs ?? 1_000;
   }
 
   async list(): Promise<readonly PlaybookRef[]> {
@@ -95,13 +119,40 @@ export class ApbAuthoring implements PlaybookAuthoring {
 
   async validate(id: string): Promise<PlaybookValidation> {
     const answer = await this.call(id, 'playbook_validate', { id }, ValidateSchema);
-    return { ok: answer.valid && answer.issues.length === 0, problems: answer.issues.map(issueText) };
+    const problems = answer.issues.filter((issue) => !isWarning(issue)).map((issue) => issueText(issue));
+    const warnings = answer.issues.filter((issue) => isWarning(issue)).map((issue) => issueText(issue));
+    return { ok: answer.valid && problems.length === 0, problems, warnings };
   }
 
-  async trial(id: string, inputs: Readonly<Record<string, string>>): Promise<PlaybookTrial> {
-    const answer = await this.call(id, 'playbook_trial', { id, params: inputs }, TrialSchema, this.trialMs);
+  async trial(id: string, inputs: Readonly<Record<string, string>>, instruction?: string): Promise<PlaybookTrial> {
+    const args = { id, params: inputs, ...(instruction === undefined ? {} : { instruction }) };
+    const answer = await this.call(id, 'playbook_trial', args, TrialSchema, this.trialMs);
     if (answer.kind === 'rejected') return { ok: false, output: `trial rejected: ${answer.reason}` };
-    return { ok: answer.status === 'succeeded', output: JSON.stringify({ status: answer.status, notes: answer.notes, diff: answer.diff }) };
+    return { ok: answer.status === 'succeeded', output: JSON.stringify(answer.answer) };
+  }
+
+  async stopTrials(id: string, notBeforeMs: number, timeoutMs: number): Promise<TrialStopResult> {
+    const deadline = performance.now() + timeoutMs;
+    let caller: ApbToolCaller;
+    let listed: z.infer<typeof TrialRunsSchema>[];
+    try {
+      caller = await this.caller();
+      listed = await caller.callToolParsed('runs_list', {}, z.array(TrialRunsSchema), {
+        timeoutMs: Math.min(this.callMs, leftUntil(deadline)),
+      });
+    } catch (error) {
+      return { searched: false, runs: [], detail: `runs_list: ${messageOf(error)}` };
+    }
+    const mine = listed.filter((run) => run.playbook === id && run.started_ts >= notBeforeMs);
+    const runs = await Promise.all(
+      mine.map(async (run): Promise<TrialRunStop> => {
+        if (TERMINAL_RUN_STATUSES.has(run.status)) return { runId: run.run_id, outcome: 'already_ended' };
+        const stop = await stopAndConfirm(caller, run.run_id, deadline, this.pollIntervalMs);
+        return { runId: run.run_id, outcome: stop.confirmed ? 'stopped' : 'unconfirmed' };
+      }),
+    );
+    const detail = runs.length === 0 ? 'no trial run found' : runs.map((run) => `${run.runId} ${run.outcome}`).join(', ');
+    return { searched: true, runs, detail };
   }
 
   /** Approves the playbook's current version; `approved` is what APB reports as trusted. */

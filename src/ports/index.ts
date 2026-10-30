@@ -18,7 +18,7 @@ export interface Sleep {
   (ms: number, signal?: AbortSignal): Promise<void>;
 }
 
-export type { Brain, BrainDecision } from './brain';
+export type { Brain, BrainDecision, PlaybookRequest } from './brain';
 export type {
   CommandPostResult,
   Executor,
@@ -32,7 +32,7 @@ export type {
   StopResult,
   WaitEventResult,
 } from './executor';
-export type { PlaybookAuthoring, PlaybookTrial, PlaybookValidation } from './playbook-authoring';
+export type { PlaybookAuthoring, PlaybookTrial, PlaybookValidation, TrialStopResult } from './playbook-authoring';
 export type { Memory, RecalledRun, RunOutcomeRecord } from './memory';
 export type { TraceSink } from './trace-sink';
 export type { RunStore } from './run-store';

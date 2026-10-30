@@ -129,7 +129,7 @@ function exampleLines(summary: E2eSummary): string[] {
   const counted = summary.examples.length === 0 ? 'not run' : `${passed}/${summary.examples.length} passed`;
   return [
     `examples        ${summary.examplesError ?? counted}`,
-    ...summary.examples.flatMap((e) => (e.mismatch === null ? [] : [`    $ ${e.command}`, `      ${e.mismatch}`])),
+    ...summary.examples.flatMap((e) => (e.mismatch === null ? [] : [`    - ${e.command}`, `      ${e.mismatch}`])),
   ];
 }
 

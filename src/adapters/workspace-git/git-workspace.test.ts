@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -122,6 +122,38 @@ describe('prepare', () => {
     expect((await run(repoDir, ['config', '--local', 'commit.gpgsign'])).trim()).toBe('false');
     expect(readFileSync(join(repoDir, '.git', 'info', 'exclude'), 'utf8')).toContain('.factory/');
   });
+
+  test('an existing exclude file without a final newline keeps its own rule and gets every scratch rule on its own line', async () => {
+    const root = newRoot();
+    const repoDir = join(root, 'work', SPEC);
+    mkdirSync(repoDir, { recursive: true });
+    await run(repoDir, ['init', '-b', 'main']);
+    writeFileSync(join(repoDir, '.git', 'info', 'exclude'), '*.local');
+
+    await workspace(root).prepare(SPEC);
+
+    const lines = readFileSync(join(repoDir, '.git', 'info', 'exclude'), 'utf8').split('\n');
+    expect(lines).toContain('*.local');
+    expect(lines).toContain('.factory/');
+  });
+
+  test("an operator's hooks (a global init.templateDir or core.hooksPath) never run on the factory's commits", async () => {
+    const root = newRoot();
+    const repoDir = join(root, 'work', SPEC);
+    mkdirSync(join(repoDir, '.git', 'hooks'), { recursive: true });
+    await run(repoDir, ['init', '-b', 'main']);
+    // What a template directory copies in at `git init`: a hook that refuses every commit.
+    writeFileSync(join(repoDir, '.git', 'hooks', 'pre-commit'), '#!/bin/sh\nexit 1\n');
+    chmodSync(join(repoDir, '.git', 'hooks', 'pre-commit'), 0o755);
+    const ws = workspace(root);
+
+    await ws.prepare(SPEC);
+    const tree = await ws.taskTree(SPEC, 'api', 1);
+    writeFileSync(join(tree.tree, 'src.ts'), 'x\n');
+    const { commit } = await ws.commitTask(tree.tree, 'past the hook');
+
+    expect(commit).toBe(await head(tree.tree));
+  });
 });
 
 describe('taskTree', () => {
@@ -184,6 +216,20 @@ describe('commitTask', () => {
     const shown = await run(tree.tree, ['show', '--name-only', '--format=', commit]);
     expect(shown).toContain('src.ts');
     expect(shown).not.toContain('node_modules');
+  });
+
+  test('never commits the .DS_Store files Finder leaves on macOS', async () => {
+    const ws = workspace(newRoot());
+    await ws.prepare(SPEC);
+    const tree = await ws.taskTree(SPEC, 'api', 1);
+    mkdirSync(join(tree.tree, 'src'), { recursive: true });
+    writeFileSync(join(tree.tree, '.DS_Store'), 'finder\n');
+    writeFileSync(join(tree.tree, 'src', '.DS_Store'), 'finder\n');
+    writeFileSync(join(tree.tree, 'src.ts'), 'x\n');
+    const { commit } = await ws.commitTask(tree.tree, 'with finder files');
+    const shown = await run(tree.tree, ['show', '--name-only', '--format=', commit]);
+    expect(shown).toContain('src.ts');
+    expect(shown).not.toContain('.DS_Store');
   });
 
   test('creates a new commit when nothing changed', async () => {
@@ -300,7 +346,7 @@ describe('cleanCopy', () => {
 });
 
 describe('deliver', () => {
-  test('replaces the output directory without .git and node_modules', async () => {
+  test('replaces the output directory without .git, node_modules and .DS_Store', async () => {
     const ws = workspace(newRoot());
     const root = newRoot();
     const { repoDir } = await ws.prepare(SPEC);
@@ -310,6 +356,7 @@ describe('deliver', () => {
     const copy = await ws.cleanCopy(SPEC);
     mkdirSync(join(copy.dir, 'node_modules'), { recursive: true });
     writeFileSync(join(copy.dir, 'node_modules', 'pkg.js'), 'junk\n');
+    writeFileSync(join(copy.dir, '.DS_Store'), 'finder\n');
     const outDir = join(root, 'out', SPEC);
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, 'stale.txt'), 'stale\n');
@@ -319,9 +366,34 @@ describe('deliver', () => {
     expect(readFileSync(join(outDir, 'app.ts'), 'utf8')).toBe('app\n');
     expect(existsSync(join(outDir, 'node_modules'))).toBe(false);
     expect(existsSync(join(outDir, '.git'))).toBe(false);
+    expect(existsSync(join(outDir, '.DS_Store'))).toBe(false);
     expect(existsSync(join(outDir, 'stale.txt'))).toBe(false);
     expect(existsSync(join(outDir, DELIVERY_MARKER))).toBe(true);
   });
+
+  // Root reads a mode-000 file, so the copy would not fail there.
+  test.skipIf(process.getuid?.() === 0)(
+    'a copy that fails part way leaves the earlier delivery whole and no temporary tree behind',
+    async () => {
+      const ws = workspace(newRoot());
+      await ws.prepare(SPEC);
+      const copy = await ws.cleanCopy(SPEC);
+      writeFileSync(join(copy.dir, 'a.txt'), 'a\n');
+      writeFileSync(join(copy.dir, 'unreadable.txt'), 'secret\n');
+      chmodSync(join(copy.dir, 'unreadable.txt'), 0o000);
+      const parent = join(newRoot(), 'out');
+      const outDir = join(parent, SPEC);
+      mkdirSync(outDir, { recursive: true });
+      writeFileSync(join(outDir, 'old.txt'), 'old\n');
+      writeFileSync(join(outDir, DELIVERY_MARKER), '');
+
+      await catchWorkspaceError(() => ws.deliver(copy.dir, outDir));
+
+      expect(readFileSync(join(outDir, 'old.txt'), 'utf8')).toBe('old\n');
+      expect(existsSync(join(outDir, DELIVERY_MARKER))).toBe(true);
+      expect(readdirSync(parent)).toEqual([SPEC]);
+    },
+  );
 
   test('refuses a non-empty directory the factory did not deliver, and leaves it alone', async () => {
     const ws = workspace(newRoot());

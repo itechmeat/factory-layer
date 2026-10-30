@@ -10,7 +10,8 @@
  * goes back to the model as a validation error naming it. Acceptance
  * checks are validated against the spec they derive from: each must quote
  * its source passage verbatim and may not take an example check's id; an
- * acceptance review may object only to the checks it was shown.
+ * acceptance review may object only to the checks it was shown; a playbook
+ * review gives at least one reason.
  */
 
 import { z } from 'zod';
@@ -23,6 +24,7 @@ import {
   type AcceptanceCheck,
   type CheckObjection,
 } from '../../domain/acceptance';
+import { PlaybookReviewSchema } from '../../domain/authoring';
 import { RecoveryChoiceSchema, type PlaybookDraft, type RecoveryChoice, type Verdict } from '../../domain/decisions';
 import { PlanTaskSchema, type Plan, type PlanTask } from '../../domain/plan';
 import { isSpecExampleCheckId, SPEC_EXAMPLE_ID_PREFIX, unquotedParts } from '../../domain/spec-examples';
@@ -210,3 +212,9 @@ export const PlaybookSubmissionSchema = z
   .pipe(
     z.object({ name: z.string().min(1), description: z.string().min(1), content: z.string().min(1) }).nullable(),
   ) satisfies z.ZodType<PlaybookDraft | null>;
+
+/** A playbook review: approve or reject with at least one reason. */
+export const PlaybookReviewSubmissionSchema = z.object({
+  verdict: PlaybookReviewSchema.shape.verdict,
+  reasons: PlaybookReviewSchema.shape.reasons.describe('what you checked and what you found; at least one'),
+});

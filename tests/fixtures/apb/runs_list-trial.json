@@ -1,0 +1,26 @@
+{
+  "tool": "runs_list",
+  "args": {},
+  "isError": false,
+  "answer": [
+    {
+      "playbook": "authoring-capture-trial",
+      "progress": {
+        "label": null,
+        "pending_question": null,
+        "pending_questions": [],
+        "pending_review": null,
+        "pending_reviews": [],
+        "pending_supervisor": null,
+        "pending_waits": [],
+        "percent": 100,
+        "plan_key": "1.0.0|",
+        "waiting_kind": null,
+        "waiting_on": null
+      },
+      "run_id": "authoring-capture-trial-1793389476955",
+      "started_ts": 1793389476975,
+      "status": "succeeded"
+    }
+  ]
+}

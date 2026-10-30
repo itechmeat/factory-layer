@@ -4,7 +4,7 @@ import type { Runtime, RunOptionsInput } from '../domain';
 import type { PackageStepResult, PackageStepsResult } from '../ports';
 
 import { RunFactory } from '.';
-import { aSpec, aTask, cliCheck, drive, fakePorts, planOf, succeedRuns, type FakePorts } from './testing';
+import { aSpec, aTask, cliCheck, drive, FakeCheckRunner, fakePorts, planOf, succeedRuns, type FakePorts } from './testing';
 
 const SPEC = aSpec();
 const OUT = 'out/todo-cli';
@@ -28,6 +28,13 @@ function stepsFailing(failing: { readonly runtime: Runtime; readonly step: Packa
     })),
   );
   return { dir: COPY, runtimes: ['bun', 'npm'], ok: false, steps };
+}
+
+/** A check runner whose package steps in the delivery copy never end. */
+class EndlessDeliveryChecks extends FakeCheckRunner {
+  override packageSteps(dir: string, runtimes: readonly Runtime[]): Promise<PackageStepsResult> {
+    return dir === COPY ? new Promise<PackageStepsResult>(() => {}) : super.packageSteps(dir, runtimes);
+  }
 }
 
 /** One task with one passing check, every run succeeding. */
@@ -65,6 +72,31 @@ describe('delivery gate', () => {
 
     expect(result).toMatchObject({ outcome: 'failed', verified: false, deliveredDir: OUT });
     expect(ports.workspace.deliveries).toEqual([{ copyDir: COPY, outDir: OUT, files: 3 }]);
+  });
+
+  test('deliverUnverified copies the integrated main before a verification that never ends', async () => {
+    const base = fakePorts();
+    const ports = { ...base, checks: new EndlessDeliveryChecks() };
+    oneTask(ports);
+    void run(ports, { deliverUnverified: true }).catch(() => undefined);
+
+    await drive(ports.clock, ports.sleep(3_600_000));
+
+    expect(ports.workspace.deliveries).toEqual([{ copyDir: COPY, outDir: OUT, files: 3 }]);
+    expect(ports.sink.ofType('delivery_done')).toEqual([]);
+  });
+
+  test('deliverUnverified replaces the early copy with the verified tree when verification passes', async () => {
+    const ports = fakePorts();
+    oneTask(ports);
+
+    const result = await run(ports, { deliverUnverified: true });
+
+    expect(result).toMatchObject({ outcome: 'succeeded', verified: true, deliveredDir: OUT });
+    expect(ports.workspace.deliveries).toEqual([
+      { copyDir: COPY, outDir: OUT, files: 3 },
+      { copyDir: COPY, outDir: OUT, files: 3 },
+    ]);
   });
 
   test('a verified copy with every task integrated and every check passing succeeds', async () => {

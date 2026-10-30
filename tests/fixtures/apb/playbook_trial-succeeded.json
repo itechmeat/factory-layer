@@ -1,0 +1,28 @@
+{
+  "tool": "playbook_trial",
+  "args": {
+    "id": "authoring-capture-trial",
+    "params": {}
+  },
+  "isError": false,
+  "answer": {
+    "durations": [
+      {
+        "expected_seconds": 0,
+        "kind": "start",
+        "measured_seconds": 0,
+        "node": "start"
+      },
+      {
+        "expected_seconds": 0,
+        "kind": "finish",
+        "measured_seconds": null,
+        "node": "finish"
+      }
+    ],
+    "external_effects_executed": false,
+    "notes": ["no filesystem writes to isolate"],
+    "run_id": "authoring-capture-trial-1793389476955",
+    "status": "succeeded"
+  }
+}

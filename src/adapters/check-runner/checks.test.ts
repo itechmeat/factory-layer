@@ -6,7 +6,7 @@ import { cleanupFixturePackages, fixturePackage } from './testing/fixture-packag
 
 afterAll(cleanupFixturePackages);
 
-const CLI_TS = `
+const CLI_JS = `
 const arg = process.argv[2];
 if (arg === 'scream') {
   process.stdout.write('LOUD OUT\\n');
@@ -31,12 +31,12 @@ function asCheck(input: Record<string, unknown>): AcceptanceCheck {
 }
 
 async function fixtureCli(packageJson: Record<string, unknown>): Promise<string> {
-  return fixturePackage({ 'package.json': JSON.stringify({ name: 'cli-fixture', private: true, ...packageJson }), 'cli.ts': CLI_TS });
+  return fixturePackage({ 'package.json': JSON.stringify({ name: 'cli-fixture', private: true, ...packageJson }), 'cli.js': CLI_JS });
 }
 
 describe('ProcessCheckRunner.runChecks, CLI checks', () => {
   test('a matching CLI check passes', async () => {
-    const dir = await fixtureCli({ bin: 'cli.ts' });
+    const dir = await fixtureCli({ bin: 'cli.js' });
     const results = await new ProcessCheckRunner().runChecks(dir, [
       asCheck({
         id: 'cli-ok',
@@ -55,7 +55,7 @@ describe('ProcessCheckRunner.runChecks, CLI checks', () => {
   });
 
   test('a wrong exit code fails naming expected and actual', async () => {
-    const dir = await fixtureCli({ bin: 'cli.ts' });
+    const dir = await fixtureCli({ bin: 'cli.js' });
     const [result] = await new ProcessCheckRunner().runChecks(dir, [
       asCheck({ id: 'cli-exit', description: 'wrong exit', kind: 'cli', args: [], expectedExitCode: 2 }),
     ]);
@@ -65,7 +65,7 @@ describe('ProcessCheckRunner.runChecks, CLI checks', () => {
   });
 
   test('a stdout mismatch is named with expected and actual', async () => {
-    const dir = await fixtureCli({ bin: 'cli.ts' });
+    const dir = await fixtureCli({ bin: 'cli.js' });
     const [result] = await new ProcessCheckRunner().runChecks(dir, [
       asCheck({
         id: 'cli-out',
@@ -84,7 +84,7 @@ describe('ProcessCheckRunner.runChecks, CLI checks', () => {
   });
 
   test('stderr is matched independently and a missing expectation passes its stream', async () => {
-    const dir = await fixtureCli({ bin: 'cli.ts' });
+    const dir = await fixtureCli({ bin: 'cli.js' });
     const runner = new ProcessCheckRunner();
     const [passing] = await runner.runChecks(dir, [
       asCheck({
@@ -117,7 +117,7 @@ describe('ProcessCheckRunner.runChecks, CLI checks', () => {
   });
 
   test('a regex expectation matches, and an invalid regex fails without throwing', async () => {
-    const dir = await fixtureCli({ bin: 'cli.ts' });
+    const dir = await fixtureCli({ bin: 'cli.js' });
     const runner = new ProcessCheckRunner();
     const [passing] = await runner.runChecks(dir, [
       asCheck({
@@ -147,7 +147,7 @@ describe('ProcessCheckRunner.runChecks, CLI checks', () => {
   });
 
   test('stdin reaches the CLI', async () => {
-    const dir = await fixtureCli({ bin: 'cli.ts' });
+    const dir = await fixtureCli({ bin: 'cli.js' });
     const [result] = await new ProcessCheckRunner().runChecks(dir, [
       asCheck({
         id: 'cli-stdin',
@@ -163,7 +163,7 @@ describe('ProcessCheckRunner.runChecks, CLI checks', () => {
   });
 
   test('a slow CLI is killed at its own timeout and fails', async () => {
-    const dir = await fixtureCli({ bin: 'cli.ts' });
+    const dir = await fixtureCli({ bin: 'cli.js' });
     const started = performance.now();
     const [result] = await new ProcessCheckRunner().runChecks(dir, [
       asCheck({ id: 'cli-slow', description: 'hangs', kind: 'cli', args: ['slow'], timeoutMs: 300, expectedExitCode: 0 }),
@@ -174,7 +174,7 @@ describe('ProcessCheckRunner.runChecks, CLI checks', () => {
   });
 
   test('bin as an object with one key is the entry', async () => {
-    const dir = await fixtureCli({ bin: { mycli: './cli.ts' } });
+    const dir = await fixtureCli({ bin: { mycli: './cli.js' } });
     const [result] = await new ProcessCheckRunner().runChecks(dir, [
       asCheck({ id: 'cli-bin-obj', description: 'one bin', kind: 'cli', args: [], expectedExitCode: 0 }),
     ]);
@@ -182,7 +182,7 @@ describe('ProcessCheckRunner.runChecks, CLI checks', () => {
   });
 
   test('main is the entry when bin is absent', async () => {
-    const dir = await fixtureCli({ main: 'cli.ts' });
+    const dir = await fixtureCli({ main: 'cli.js' });
     const [result] = await new ProcessCheckRunner().runChecks(dir, [
       asCheck({ id: 'cli-main', description: 'main entry', kind: 'cli', args: [], expectedExitCode: 0 }),
     ]);
@@ -197,7 +197,7 @@ describe('ProcessCheckRunner.runChecks, CLI checks', () => {
     expect(empty?.status).toBe('failed');
     expect(empty?.reasons.join(' ')).toContain('no CLI entry');
 
-    const two = await fixtureCli({ bin: { a: './cli.ts', b: './cli.ts' } });
+    const two = await fixtureCli({ bin: { a: './cli.js', b: './cli.js' } });
     const [ambiguous] = await new ProcessCheckRunner().runChecks(two, [
       asCheck({ id: 'cli-two-bins', description: 'two bins', kind: 'cli', args: [], expectedExitCode: 0 }),
     ]);
@@ -206,7 +206,7 @@ describe('ProcessCheckRunner.runChecks, CLI checks', () => {
   });
 
   test('a CLI check on a missing directory resolves with a failed result, not a throw', async () => {
-    const dir = await fixtureCli({ bin: 'cli.ts' });
+    const dir = await fixtureCli({ bin: 'cli.js' });
     const [result] = await new ProcessCheckRunner().runChecks('/nonexistent-fcr-dir-xyz', [
       asCheck({ id: 'cli-missing-dir', description: 'no such dir', kind: 'cli', args: [], expectedExitCode: 0 }),
     ]);
@@ -303,5 +303,27 @@ describe('ProcessCheckRunner.runChecks, command checks', () => {
     expect(passed?.status).toBe('passed');
     expect(failed?.status).toBe('failed');
     expect(failed?.reasons.join(' ')).toContain('stdout: expected exact "out\\n", got "other\\n"');
+  });
+});
+
+describe('ProcessCheckRunner.runChecks, Node only', () => {
+  test('a CLI entry that needs Bun fails, because the entry runs under node', async () => {
+    const dir = await fixturePackage({
+      'package.json': JSON.stringify({ name: 'bun-cli-fixture', private: true, bin: 'cli.js' }),
+      'cli.js': 'process.stdout.write(Bun.version);\n',
+    });
+    const [result] = await new ProcessCheckRunner().runChecks(dir, [
+      asCheck({ id: 'cli-bun', description: 'needs Bun', kind: 'cli', args: [], expectedExitCode: 0 }),
+    ]);
+    expect(result?.status).toBe('failed');
+    expect(result?.detail).toContain('Bun is not defined');
+  });
+
+  test('a command check finds no bun on the PATH', async () => {
+    const dir = await fixtureCli({ bin: 'cli.js' });
+    const [result] = await new ProcessCheckRunner().runChecks(dir, [
+      asCheck({ id: 'cmd-bun', description: 'bun absent', kind: 'command', command: 'command -v bun', expectedExitCode: 1 }),
+    ]);
+    expect(result?.status).toBe('passed');
   });
 });

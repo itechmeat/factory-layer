@@ -255,7 +255,7 @@ describe('dispatch', () => {
     expect((await base.store.load('run-d'))?.abandonedTrees.map((entry) => entry.tree)).toEqual(['tree-only-r1']);
   });
 
-  test('a start still in flight at the cutoff is awaited and the run it creates is stopped before the slot is freed', async () => {
+  test('a start still in flight at the cutoff does not hold delivery back, and the run it creates is stopped before the slot is freed', async () => {
     const base = fakePorts();
     const ports = { ...base, sink: new SlotRecordingSink(base.slots) };
     planOf(ports, [aTask({ id: 'only', playbook: 'implement-task' })]);
@@ -268,11 +268,11 @@ describe('dispatch', () => {
     expect(base.executor.runs.get('slow-run')?.status).toBe('stopped');
     const stored = await base.store.load('run-d');
     expect(stored?.intents.filter((intent) => intent.kind === 'start')).toEqual([]);
-    expect(ports.sink.liveCounts.find((entry) => entry.type === 'delivery_done')?.live).toBe(0);
+    expect(ports.sink.liveCounts.find((entry) => entry.type === 'delivery_done')?.live).toBe(1);
     expect(base.slots.liveCount()).toBe(0);
   });
 
-  test('a start in flight at the cutoff whose answer is lost is settled by lookup and the late run is stopped', async () => {
+  test('a start in flight at the cutoff whose answer is lost is settled by lookup after delivery began and the late run is stopped', async () => {
     const base = fakePorts();
     const ports = { ...base, sink: new SlotRecordingSink(base.slots) };
     planOf(ports, [aTask({ id: 'only', playbook: 'implement-task' })]);
@@ -286,7 +286,7 @@ describe('dispatch', () => {
     expect(base.executor.starts).toHaveLength(1);
     const stored = await base.store.load('run-d');
     expect(stored?.intents.filter((intent) => intent.kind === 'start')).toEqual([]);
-    expect(ports.sink.liveCounts.find((entry) => entry.type === 'delivery_done')?.live).toBe(0);
+    expect(ports.sink.liveCounts.find((entry) => entry.type === 'delivery_done')?.live).toBe(1);
     expect(base.slots.liveCount()).toBe(0);
   });
 

@@ -33,6 +33,8 @@ export function eventText(event: TraceEvent): string | null {
       return `acceptance: ${String(event.checkIds.length)} checks`;
     case 'acceptance_unavailable':
       return `acceptance unavailable: ${event.reason}`;
+    case 'spec_examples_malformed':
+      return `spec examples not used: ${event.problems.join('; ')}`;
     case 'acceptance_check_dropped':
       return `acceptance check ${event.checkId} dropped (${event.stage}): ${event.reason}`;
     case 'decision_started':
@@ -59,6 +61,12 @@ export function eventText(event: TraceEvent): string | null {
       return `memory ${event.phase} failed: ${event.reason}`;
     case 'storage_failed':
       return `storage failed: ${event.reason}`;
+    case 'authoring_started':
+      return `authoring a playbook for ${event.taskKind}`;
+    case 'authoring_step':
+      return `authoring ${event.step} ${event.ok ? 'ok' : 'failed'}${event.playbookId === null ? '' : ` [${event.playbookId}]`}${event.detail === '' ? '' : `: ${event.detail}`}`;
+    case 'authoring_ended':
+      return `authoring ended: ${event.result}${event.playbookId === null ? '' : ` [${event.playbookId}]`}${event.detail === '' ? '' : ` (${event.detail})`}`;
     case 'executor_started':
     case 'executor_event':
     case 'executor_ended':
