@@ -3,14 +3,17 @@
  * its import fails with the module error, a bin that throws fails while a
  * bin that prints its usage and exits 1 passes, a server bin the start script
  * launches is covered by the start check, a CLI bin runs with stdin closed and
- * a hanging one times out, an HTTP package is accepted on the loopback, and a Bun-only start script fails in the Node-only
- * environment (no bun on the PATH).
+ * a hanging one times out, an HTTP package is accepted on the loopback, a Bun-only start script fails in the Node-only
+ * environment (no bun on the PATH), and a lock file out of step with
+ * package.json fails the install as `npm ci` would for a grader.
  */
 
 import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+import { z } from 'zod';
 
 import { launchedByStart, startupCheck } from './hidden-run-startup';
 import { runFakeFactory } from './testing/hidden-fake-factory';
@@ -41,6 +44,19 @@ describe('startupCheck', () => {
     const outcome = await startupCheck(root, deliver(root, 'deliver-js'), Date.now() + 60_000);
     expect(outcome.ok).toBe(true);
     expect(outcome.detail).toContain('exited 0');
+  });
+
+  test('a lock file out of step with package.json fails the install', async () => {
+    const root = makeRoot();
+    const files = deliver(root, 'deliver-js');
+    const manifestPath = join(root, 'deliver-js', 'package.json');
+    const manifest = z.record(z.string(), z.unknown()).parse(JSON.parse(readFileSync(manifestPath, 'utf8')));
+    writeFileSync(manifestPath, JSON.stringify({ ...manifest, devDependencies: { typescript: '7.0.2' } }));
+    const lock = { name: manifest['name'], lockfileVersion: 3, requires: true, packages: { '': { name: manifest['name'] } } };
+    writeFileSync(join(root, 'deliver-js', 'package-lock.json'), JSON.stringify(lock));
+    const outcome = await startupCheck(root, [...files, 'deliver-js/package-lock.json'], Date.now() + 60_000);
+    expect(outcome.ok).toBe(false);
+    expect(outcome.detail).toContain('npm ci');
   });
 
   test('a bin with a missing import fails with the module error', async () => {
