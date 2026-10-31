@@ -15,10 +15,10 @@ const TEST_SLACK_MS = 10_000;
 const ApbConfigSchema = z.object({ execution: z.object({ fallback_to_host: z.boolean() }) });
 
 /** One project profile per supported agent CLI, named after it. */
-const AGENT_PROFILES = ['agy', 'claude', 'codex', 'grok', 'opencode', 'zcode'];
+const AGENT_PROFILES = ['agy', 'claude', 'claude-strong', 'codex', 'grok', 'opencode', 'zcode'];
 
 /** The coding playbooks the factory dispatches. */
-const STARTERS = ['scaffold', 'implement-task', 'repair', 'integrate'];
+const STARTERS = ['build-task', 'integrate'];
 
 const ProfileSchema = z.object({ name: z.string(), executor: z.object({ agent: z.string(), fallbacks: z.array(z.unknown()) }) });
 
@@ -33,13 +33,13 @@ test('the project APB configuration disables the host fallback', async () => {
   expect(ApbConfigSchema.parse(raw).execution.fallback_to_host).toBe(false);
 });
 
-test('the project ships one profile per agent CLI, named after it and without a fallback', async () => {
+test('the project ships one profile per agent CLI, named after it and without a fallback, plus claude-strong for the escalated fix round', async () => {
   expect(readdirSync(join(REPO_ROOT, '.apb', 'profiles')).toSorted()).toEqual(AGENT_PROFILES);
   for (const name of AGENT_PROFILES) {
     const profile = ProfileSchema.parse(await yamlOf('profiles', name, 'profile.yaml'));
     expect({ name: profile.name, agent: profile.executor.agent, fallbacks: profile.executor.fallbacks }).toEqual({
       name,
-      agent: name,
+      agent: name === 'claude-strong' ? 'claude' : name,
       fallbacks: [],
     });
   }

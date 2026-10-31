@@ -15,7 +15,7 @@ import { answerOf } from '../adapters/hands-apb/testing/apb-fixtures';
 import { FakeApb, type FakeHandler } from '../adapters/hands-apb/testing/fake-apb';
 import { starterApproval, withServer } from './doctor-apb';
 
-const STARTERS = ['scaffold', 'implement-task', 'repair', 'integrate'];
+const STARTERS = ['build-task', 'integrate'];
 const CatalogEntriesSchema = z.array(z.looseObject({ ref: z.looseObject({ id: z.string() }), trusted: z.boolean() }));
 const FIXTURE = join(import.meta.dir, '../../tests/fixtures/fake-mcp-server.ts');
 
@@ -32,19 +32,19 @@ function apbWith(overrides: Record<string, FakeHandler> = {}): FakeApb {
 describe('starter approval', () => {
   test('starters approved at their current versions and an approved default profile bundle pass, naming the versions', async () => {
     const found = await starterApproval(apbWith(), STARTERS, 1000);
-    expect(found).toContain('scaffold 1.1.0');
-    expect(found).toContain('integrate 1.4.0');
+    expect(found).toContain('build-task 1.0.0');
+    expect(found).toContain('integrate 2.0.0');
     expect(found).toContain('profile claude');
   });
 
   test('a starter whose current version is not approved fails, naming it and its version', async () => {
     const catalog = answerOf('playbook_catalog');
     const entries = CatalogEntriesSchema.parse(catalog['entries']).map((entry) =>
-      entry.ref.id === 'repair' ? { ...entry, trusted: false } : entry,
+      entry.ref.id === 'build-task' ? { ...entry, trusted: false } : entry,
     );
     catalog['entries'] = entries;
     await expect(starterApproval(apbWith({ playbook_catalog: async () => catalog }), STARTERS, 1000)).rejects.toThrow(
-      'repair 1.1.0 is not approved at its current version',
+      'build-task 1.0.0 is not approved at its current version',
     );
   });
 

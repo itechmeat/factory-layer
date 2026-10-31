@@ -14,7 +14,7 @@ import {
 describe('RunOptionsSchema', () => {
   test('fills the defaults for an empty input', () => {
     expect(RunOptionsSchema.parse({})).toEqual({
-      requiredRuntimes: ['bun', 'npm'],
+      requiredRuntimes: ['bun'],
       deliverUnverified: false,
     });
   });

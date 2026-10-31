@@ -1,0 +1,212 @@
+schema: 2
+id: integrate
+name: Integrate a conflicting merge
+description: Resolves a merge conflict left in the run's working tree so both sides' intent survives. A coding agent resolves the conflicts, the package's own quality gates run as a script, failures loop back to a fix agent with the gate output, and a script commits the merge only when the gates are green; otherwise the run ends blocked with the merge unfinished. The factory passes the working tree at start.
+version: 2.0.0
+params:
+- name: task_file
+  type: string
+  label: Path of the description of the task being merged, relative to the working tree
+  options: null
+  default: null
+- name: conflict_paths
+  type: string
+  label: Paths with merge conflicts, relative to the working tree, one per line
+  options: null
+  default: null
+defaults:
+  profile:
+    name: claude
+    scope: auto
+  max_retries: 1
+  timeout_seconds: null
+  on_failure: stop
+  require_verdict: true
+  max_parallel: 2
+supervisor: null
+trigger:
+  when:
+  - resolve a merge conflict left in a factory working tree, prove it with the quality gates and commit the merge
+  avoid_when:
+  - a working tree without a merge in progress
+  examples:
+  - resolve the conflicts of this merge and commit it
+requires:
+  files: []
+  commands:
+  - git
+  - bun
+  - node
+effects:
+- fs_read
+- fs_write
+- network
+nodes:
+- id: start
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: start
+- id: resolve
+  title: Resolve the conflicts
+  expected_duration: 6m
+  inputs: null
+  outputs:
+    files: []
+    fields:
+    - summary
+    - checks
+  cache: null
+  type: agent_task
+  prompt: |
+    Your working directory is a git working tree with a merge in progress. The task being merged is described at {{params.task_file}} (relative to the working tree).
+
+    These paths have conflicts:
+    {{params.conflict_paths}}
+
+    First run `git rev-parse -q --verify MERGE_HEAD`. If no merge is in progress, an earlier attempt already resolved and committed it: change nothing and report success.
+
+    Resolve the merge:
+    1. Read both sides of every conflict (`git diff`, `git log --merge`) and keep the intent of both; never drop one side's behaviour or tests to make the merge clean.
+    2. Change only the conflicted paths, unless the merged code does not compile without a small fix elsewhere; name every such fix in your report.
+    3. Run `bun run check`. Do not commit: a later step commits the merge once the quality gates pass.
+
+    If the conflict cannot be resolved without a decision about the product, leave it and report a failure.
+    Report in the status file: `summary` (how each conflict was resolved, one paragraph) and `checks` (each command you ran and its result, one per line).
+  profile: null
+  max_retries: null
+  timeout_seconds: 900
+  workdir: null
+  isolation: null
+  connectors: []
+  interactive: false
+- id: gates
+  title: Run the package's quality gates on the combined tree
+  expected_duration: 2m
+  inputs: null
+  outputs: null
+  cache: null
+  type: script
+  script: scripts/gates.sh
+  runner: sh
+  timeout_seconds: 600
+- id: gate_check
+  title: Gates verdict
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: condition
+  max_loops: 3
+- id: fix
+  title: Fix what the gates report
+  expected_duration: 5m
+  inputs: null
+  outputs:
+    files: []
+    fields:
+    - summary
+    - checks
+  cache: null
+  type: agent_task
+  prompt: |
+    The quality gates failed on the merged tree in your working directory (the merge is still in progress; do not commit or abort it). Their output:
+
+    {{nodes.gates.output}}
+
+    The task being merged is described at {{params.task_file}}. Fix the causes while keeping the intent of both sides of the merge; never weaken, skip or delete a test or a gate. Then run `bun run check`; it must pass.
+    Report in the status file: `summary` (each failure and its fix, one paragraph) and `checks` (each command you ran and its result, one per line).
+  profile: null
+  max_retries: null
+  timeout_seconds: 900
+  workdir: null
+  isolation: null
+  connectors: []
+  interactive: false
+- id: record
+  title: Record the resolution in a local commit
+  expected_duration: 10s
+  inputs: null
+  outputs: null
+  cache: null
+  type: script
+  script: scripts/record-resolution.sh
+  runner: sh
+  timeout_seconds: 60
+- id: done
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: finish
+  outcome: success
+  prompt: null
+  profile: null
+- id: blocked
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: finish
+  outcome: failure
+  prompt: null
+  profile: null
+edges:
+- from: start
+  to: resolve
+  condition: null
+  fallback: false
+  join: null
+- from: resolve
+  to: gates
+  condition: null
+  fallback: false
+  join: null
+- from: gates
+  to: gate_check
+  condition: null
+  fallback: false
+  join: null
+- from: gate_check
+  to: record
+  condition:
+    type: node_status
+    node: gates
+    equals: success
+  fallback: false
+  join: null
+- from: gate_check
+  to: fix
+  condition:
+    type: output_match
+    node: gates
+    pattern: 'GATES: red'
+  fallback: false
+  join: null
+- from: gate_check
+  to: blocked
+  condition: null
+  fallback: true
+  join: null
+- from: fix
+  to: gates
+  condition: null
+  fallback: false
+  join: null
+- from: record
+  to: done
+  condition:
+    type: node_status
+    node: record
+    equals: success
+  fallback: false
+  join: null
+- from: record
+  to: blocked
+  condition: null
+  fallback: true
+  join: null

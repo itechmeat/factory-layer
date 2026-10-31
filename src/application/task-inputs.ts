@@ -1,7 +1,9 @@
 /**
  * What a task's executor runs are started with: the playbook per run role
- * (the task's own playbook, `repair` for a repair run, `integrate` for a
- * conflict resolution) and the typed start inputs (task text with any hint,
+ * (the task's own playbook in `scaffold` mode for the plan's root task and
+ * `implement` mode otherwise, `build-task` in `repair` mode for a repair
+ * run, `integrate` for a conflict resolution) and the typed start inputs
+ * (mode, task text with any hint,
  * owned paths, failing checks with their reasons and invocations,
  * conflicting paths), and
  * the follow-up run of a failed one in the same tree.
@@ -13,8 +15,8 @@ import type { ExecutorStartInputs } from '../ports';
 import type { DispatchRequest } from './dispatch';
 import type { RunContext } from './run-context';
 
-/** The playbook of a repair run: fix the given failing checks or follow the hint. */
-export const REPAIR_PLAYBOOK = 'repair';
+/** The playbook of a repair run (in `repair` mode): fix the given failing checks or follow the hint. */
+export const REPAIR_PLAYBOOK = 'build-task';
 /** The playbook of an integrate run: resolve a merge conflict in the task tree. */
 export const INTEGRATE_PLAYBOOK = 'integrate';
 
@@ -25,9 +27,11 @@ function baseInputs(ctx: RunContext, taskId: string, hint: string | null): Execu
   return { taskText: hint === null ? text : `${text}\n\nHint: ${hint}`, ownedPaths: task.ownedPaths };
 }
 
-/** The first run of a task, with its own playbook. */
+/** The first run of a task, with its own playbook: the root task (no dependencies) sets the package up, every other one builds on it. */
 export function taskRequest(ctx: RunContext, taskId: string): DispatchRequest {
-  return { taskId, role: 'task', playbook: ctx.owner.planTask(taskId).playbook, inputs: baseInputs(ctx, taskId, null) };
+  const task = ctx.owner.planTask(taskId);
+  const mode = task.dependsOn.length === 0 ? 'scaffold' : 'implement';
+  return { taskId, role: 'task', playbook: task.playbook, inputs: { ...baseInputs(ctx, taskId, null), mode } };
 }
 
 /**
@@ -52,7 +56,7 @@ export function repairRequest(
     taskId,
     role: 'repair',
     playbook: REPAIR_PLAYBOOK,
-    inputs: { ...baseInputs(ctx, taskId, repair.hint), ...(failingChecks.length > 0 ? { failingChecks } : {}) },
+    inputs: { ...baseInputs(ctx, taskId, repair.hint), mode: 'repair', ...(failingChecks.length > 0 ? { failingChecks } : {}) },
   };
 }
 

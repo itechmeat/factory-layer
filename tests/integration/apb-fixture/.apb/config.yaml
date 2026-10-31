@@ -1,0 +1,8 @@
+# playbook project config
+# server:
+#   port: 7321
+
+# The factory drives agent work only through agent CLIs: a step whose CLIs
+# cannot start fails instead of falling back to a host session.
+execution:
+  fallback_to_host: false

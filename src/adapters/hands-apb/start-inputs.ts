@@ -20,9 +20,7 @@ export const TASK_FILE = '.factory/task.md';
 
 /** The params the starter playbooks declare, so their starts need no lookup. */
 export const STARTER_PARAMS: Readonly<Record<string, readonly string[]>> = {
-  scaffold: ['task_file', 'owned_paths'],
-  'implement-task': ['task_file', 'owned_paths'],
-  repair: ['task_file', 'owned_paths', 'failing_checks'],
+  'build-task': ['task_file', 'owned_paths', 'mode', 'failing_checks'],
   integrate: ['task_file', 'conflict_paths'],
 };
 
@@ -33,6 +31,7 @@ export const NO_FAILING_CHECKS = `none: no check has failed yet; fix the failure
 function availableParams(inputs: ExecutorStartInputs): Readonly<Record<string, string | undefined>> {
   return {
     task_file: TASK_FILE,
+    mode: inputs.mode,
     owned_paths: inputs.ownedPaths.length === 0 ? undefined : inputs.ownedPaths.join('\n'),
     failing_checks:
       inputs.failingChecks === undefined || inputs.failingChecks.length === 0

@@ -8,10 +8,8 @@ so its output must be stable and machine-readable.
 
 ## Package
 
-1. A TypeScript npm package named `wordfreq` with a `bin` entry
-   `wordfreq` that runs under Node 20 or newer (compiled JavaScript or a
-   Node shebang; it must not require Bun to run).
-2. `npm test` and `bun test` both run the package's tests and pass.
+1. A TypeScript package named `wordfreq` with a `bin` entry `wordfreq`.
+2. The package's tests pass.
 3. The package also exports a function `countWords(text: string): Array<{
    word: string; count: number }>` from its main entry, returning the same
    ranking the CLI prints (before `--top` is applied).

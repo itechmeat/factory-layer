@@ -177,21 +177,21 @@ describe('checkAgent', () => {
 });
 
 describe('withDefaultProfile', () => {
-  const yaml = 'schema: 2\nid: repair\ndefaults:\n  profile:\n    name: claude\n    scope: auto\n  max_retries: 1\n';
+  const yaml = 'schema: 2\nid: build-task\ndefaults:\n  profile:\n    name: claude\n    scope: auto\n  max_retries: 1\n';
 
   test('switches only the default profile name', () => {
-    expect(withDefaultProfile('repair', yaml, 'codex')).toBe(yaml.replace('name: claude', 'name: codex'));
+    expect(withDefaultProfile('build-task', yaml, 'codex')).toBe(yaml.replace('name: claude', 'name: codex'));
   });
 
   test('a playbook without a defaults.profile block is refused, naming it', () => {
-    expect(() => withDefaultProfile('repair', 'schema: 2\nid: repair\ndefaults:\n  profile: null\n', 'codex')).toThrow(
-      /playbook repair: the playbook has no defaults.profile.name block/,
+    expect(() => withDefaultProfile('build-task', 'schema: 2\nid: build-task\ndefaults:\n  profile: null\n', 'codex')).toThrow(
+      /playbook build-task: the playbook has no defaults.profile.name block/,
     );
   });
 });
 
 describe('checkUpdate', () => {
   test('an update answer without a version is a typed failure naming the playbook', () => {
-    expect(() => checkUpdate('repair', { id: 'repair' })).toThrow(/playbook repair: unexpected update answer/);
+    expect(() => checkUpdate('build-task', { id: 'build-task' })).toThrow(/playbook build-task: unexpected update answer/);
   });
 });

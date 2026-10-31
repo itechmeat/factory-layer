@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
 
 import {
+  DispatchRequestSchema,
   EXECUTOR_SETTLE_WINDOW_MS,
   RunOptionsSchema,
   RunStateSchema,
@@ -16,7 +17,7 @@ import { WorkspaceError, type TaskTree } from '../ports';
 
 import { RunFactory } from '.';
 import { Decider } from './decide';
-import { dispatchRun } from './dispatch';
+import { dispatchRun, requestOf, requestRecord } from './dispatch';
 import { IntegrationQueue } from './integration-queue';
 import { serializedReplan } from './replan';
 import type { RunContext } from './run-context';
@@ -79,6 +80,19 @@ function contextOn(ports: FakePorts, plan: Plan): RunContext {
     work: new Map(),
   };
 }
+
+describe('persisted requests', () => {
+  test('a request keeps its mode through the record a resume restarts from', () => {
+    const request = {
+      taskId: 'core',
+      role: 'repair' as const,
+      playbook: 'build-task',
+      inputs: { taskText: 'fix it', mode: 'repair' as const, ownedPaths: ['src/core.ts'], failingChecks: [{ id: 'c1', reason: 'exit 1' }] },
+    };
+    const record = DispatchRequestSchema.parse(JSON.parse(JSON.stringify(requestRecord(request))));
+    expect(requestOf(record)).toEqual(request);
+  });
+});
 
 describe('dispatch', () => {
   test('a dependant listed first is dispatched after its dependency is integrated', async () => {
@@ -190,9 +204,9 @@ describe('dispatch', () => {
 
   test('a lost start answer whose run appears 30 s later is stopped as an orphan before the replacement starts', async () => {
     const ports = fakePorts();
-    planOf(ports, [aTask({ id: 'only', playbook: 'implement-task' })]);
+    planOf(ports, [aTask({ id: 'only', playbook: 'build-task' })]);
     ports.executor.startWith({ outcome: 'indeterminate', detail: 'answer lost' });
-    ports.executor.appearLater({ runId: 'late-run', playbook: 'implement-task', tree: 'tree-only-r1' }, 30_000);
+    ports.executor.appearLater({ runId: 'late-run', playbook: 'build-task', tree: 'tree-only-r1' }, 30_000);
     succeedRuns(ports);
 
     const result = await drive(ports.clock, run(ports));
@@ -258,7 +272,7 @@ describe('dispatch', () => {
   test('a start still in flight at the cutoff does not hold delivery back, and the run it creates is stopped before the slot is freed', async () => {
     const base = fakePorts();
     const ports = { ...base, sink: new SlotRecordingSink(base.slots) };
-    planOf(ports, [aTask({ id: 'only', playbook: 'implement-task' })]);
+    planOf(ports, [aTask({ id: 'only', playbook: 'build-task' })]);
     base.executor.startWith({ outcome: 'ok', runId: 'slow-run', delayMs: 90_000 });
     succeedRuns(base);
     const startMs = base.clock.now().getTime();
@@ -275,9 +289,9 @@ describe('dispatch', () => {
   test('a start in flight at the cutoff whose answer is lost is settled by lookup after delivery began and the late run is stopped', async () => {
     const base = fakePorts();
     const ports = { ...base, sink: new SlotRecordingSink(base.slots) };
-    planOf(ports, [aTask({ id: 'only', playbook: 'implement-task' })]);
+    planOf(ports, [aTask({ id: 'only', playbook: 'build-task' })]);
     base.executor.startWith({ outcome: 'indeterminate', detail: 'answer lost', delayMs: 90_000 });
-    base.executor.appearLater({ runId: 'late-run', playbook: 'implement-task', tree: 'tree-only-r1' }, 100_000);
+    base.executor.appearLater({ runId: 'late-run', playbook: 'build-task', tree: 'tree-only-r1' }, 100_000);
     const startMs = base.clock.now().getTime();
 
     await drive(base.clock, new RunFactory(ports).run({ runId: 'run-d', spec: SPEC, cutoffAtMs: startMs + 70_000 }));
@@ -294,9 +308,9 @@ describe('dispatch', () => {
     const ports = fakePorts();
     const sink = new SlotRecordingSink(ports.slots);
     const recorded = { ...ports, sink };
-    planOf(recorded, [aTask({ id: 'only', playbook: 'implement-task' })]);
+    planOf(recorded, [aTask({ id: 'only', playbook: 'build-task' })]);
     ports.executor.startWith({ outcome: 'indeterminate', detail: 'answer lost' });
-    ports.executor.appearLater({ runId: 'late-run', playbook: 'implement-task', tree: 'tree-only-r1' }, 0);
+    ports.executor.appearLater({ runId: 'late-run', playbook: 'build-task', tree: 'tree-only-r1' }, 0);
     ports.executor.setStopOutcome('late-run', { confirmed: false });
 
     const result = await drive(ports.clock, run(recorded));

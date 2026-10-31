@@ -36,7 +36,7 @@ import { Decider } from './decide';
 import { RunTrace } from './run-trace';
 
 /** The stored playbook whose YAML the Architect gets as the format example. */
-export const FORMAT_PLAYBOOK_ID = 'implement-task';
+export const FORMAT_PLAYBOOK_ID = 'build-task';
 
 /** What the authoring run is built from. */
 export interface AuthoringPorts {

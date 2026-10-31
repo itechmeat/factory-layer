@@ -14,7 +14,7 @@ import { basename, join } from 'node:path';
 import { z } from 'zod';
 
 import { gitEnv, withScratchHome } from '../src/adapters/child-env';
-import { nodeOnlyEnv } from '../src/adapters/node-only-env';
+import { bunRuntimeEnv, nodeOnlyEnv } from '../src/adapters/node-only-env';
 import { npmArgs } from '../src/adapters/package-guard';
 import { runCommand } from '../src/adapters/check-runner/process';
 import { DELIVERY_MARKER } from '../src/adapters/workspace-git/git-workspace';
@@ -247,13 +247,20 @@ export function realTempDir(prefix: string): string {
   return realpathSync(mkdtempSync(join(tmpdir(), prefix)));
 }
 
+/** The package manager a delivery was developed with: npm when it carries only package-lock.json, else bun. */
+export function packageManagerOf(dir: string): 'bun' | 'npm' {
+  const bunLock = existsSync(join(dir, 'bun.lock')) || existsSync(join(dir, 'bun.lockb'));
+  return existsSync(join(dir, 'package-lock.json')) && !bunLock ? 'npm' : 'bun';
+}
+
 /** True for the temp entries the copies and the copy-back always leave out. */
 function notDeliveryEntry(path: string): boolean {
   return !['node_modules', '.git'].includes(basename(path));
 }
 
 /**
- * Copy of dir without node_modules and .git to a temp dir, `npm install --ignore-scripts`, `npm run build` when package.json has a build script, then every file copied back except node_modules and .git. No build script: ok, detail "no build script".
+ * Copy of dir without node_modules and .git to a temp dir, an install without lifecycle scripts, `run build` when package.json has a build script, then every file copied back except node_modules and .git. No build script: ok, detail "no build script".
+ * A package with a Bun lock file (or no lock file) installs and builds with bun, as it was developed; one with only package-lock.json with npm in the Node-only environment.
  */
 export async function buildInPlace(dir: string, deadlineMs: number): Promise<StepOutcome> {
   const copyDir = realTempDir('factory-hidden-build-');
@@ -262,28 +269,30 @@ export async function buildInPlace(dir: string, deadlineMs: number): Promise<Ste
     const manifest = readManifest(copyDir, 'the delivery');
     if (!manifest.ok) return manifest.outcome;
     return await withScratchHome(async (home) => {
-      const env = nodeOnlyEnv(home, { NO_COLOR: '1', FORCE_COLOR: '0' });
+      const pm = packageManagerOf(copyDir);
+      const quiet = { NO_COLOR: '1', FORCE_COLOR: '0' };
+      const env = pm === 'npm' ? nodeOnlyEnv(home, quiet) : bunRuntimeEnv(home, quiet);
       const install = await runCommand({
-        command: 'npm',
-        args: npmArgs(copyDir, ['install', '--ignore-scripts']),
+        command: pm,
+        args: pm === 'npm' ? npmArgs(copyDir, ['install', '--ignore-scripts']) : ['install', '--ignore-scripts'],
         cwd: copyDir,
         timeoutMs: Math.min(INSTALL_TIMEOUT_MS, deadlineMs - Date.now()),
         env,
         secrets: [],
         stdin: '',
       });
-      if (install.exitCode !== 0 || install.timedOut) return { ok: false, detail: failedDetail('npm install', install) };
+      if (install.exitCode !== 0 || install.timedOut) return { ok: false, detail: failedDetail(`${pm} install`, install) };
       if (manifest.manifest.scripts?.['build'] === undefined) return { ok: true, detail: 'no build script' };
       const build = await runCommand({
-        command: 'npm',
-        args: npmArgs(copyDir, ['run', 'build']),
+        command: pm,
+        args: pm === 'npm' ? npmArgs(copyDir, ['run', 'build']) : ['run', 'build'],
         cwd: copyDir,
         timeoutMs: Math.min(BUILD_TIMEOUT_MS, deadlineMs - Date.now()),
         env,
         secrets: [],
         stdin: '',
       });
-      if (build.exitCode !== 0 || build.timedOut) return { ok: false, detail: failedDetail('npm run build', build) };
+      if (build.exitCode !== 0 || build.timedOut) return { ok: false, detail: failedDetail(`${pm} run build`, build) };
       try {
         cpSync(copyDir, dir, { recursive: true, filter: notDeliveryEntry });
       } catch (error) {

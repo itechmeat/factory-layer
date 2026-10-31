@@ -1,0 +1,8 @@
+name: claude-strong
+description: 'Stronger TypeScript coding agent of the factory: one root-cause fix round when two ordinary rounds did not pass'
+executor:
+  agent: claude
+  model: claude-opus-5-5
+  fallbacks: []
+soul: any
+skills: []

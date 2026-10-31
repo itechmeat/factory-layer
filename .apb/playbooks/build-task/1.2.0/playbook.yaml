@@ -1,0 +1,422 @@
+schema: 2
+id: build-task
+name: Build a task
+description: Builds one planned factory task in the run's working tree and proves it. A script routes the run by mode; for a scaffold a script lays down the factory's default stack first. A coding agent builds, then the package's quality gates (a script) and a reviewer agent run side by side and join into one verdict. A red gate or a review finding loops to a fix agent (two rounds), then escalates once to a stronger model; the run ends done or blocked. The factory passes the working tree at start and commits the result itself.
+version: 1.2.0
+params:
+- name: task_file
+  type: string
+  label: Path of the task description, relative to the working tree
+  options: null
+  default: null
+- name: owned_paths
+  type: string
+  label: Paths this run may create or change, relative to the working tree, one per line
+  options: null
+  default: null
+- name: mode
+  type: string
+  label: scaffold (set up the package), implement (build the task) or repair (fix failing checks)
+  options:
+  - scaffold
+  - implement
+  - repair
+  default: implement
+- name: failing_checks
+  type: string
+  label: The failing checks a repair fixes, with their reasons and how to run them, one per line
+  options: null
+  default: null
+defaults:
+  profile:
+    name: claude
+    scope: auto
+  max_retries: 1
+  timeout_seconds: null
+  on_failure: stop
+  require_verdict: true
+  max_parallel: 2
+supervisor: null
+trigger:
+  when:
+  - set up, implement or repair one planned factory task in a working tree, proven by quality gates and a review
+  avoid_when:
+  - resolving a merge conflict (use integrate)
+  examples:
+  - implement the task in the task file for these owned paths
+  - repair these failing checks of the task
+requires:
+  files: []
+  commands:
+  - git
+  - bun
+  - node
+effects:
+- fs_read
+- fs_write
+- network
+nodes:
+- id: start
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: start
+- id: route
+  title: Route by mode (script)
+  expected_duration: 5s
+  inputs: null
+  outputs: null
+  cache: null
+  type: script
+  script: scripts/route.sh
+  runner: sh
+  timeout_seconds: 60
+- id: stack
+  title: Lay down the factory's default stack (script)
+  expected_duration: 30s
+  inputs: null
+  outputs: null
+  cache: null
+  type: script
+  script: scripts/stack.sh
+  runner: sh
+  timeout_seconds: 300
+- id: build
+  title: Write the code and its tests
+  expected_duration: 8m
+  inputs: null
+  outputs:
+    files: []
+    fields:
+    - summary
+    - checks
+  cache: null
+  type: agent_task
+  prompt: "Read the task description at {{params.task_file}} (relative to your working directory, which is the task's working tree).\n\nMode: {{params.mode}}.\n\nYou own only these paths, relative to the working tree:\n{{params.owned_paths}}\nChange nothing outside them. If the task cannot be done without that, stop and report it as a failure.\n\nWhat to do in each mode:\n- scaffold: a script has already laid down the default stack below (tsconfig.json, .oxlintrc.json, .oxfmtrc.json, bunfig.toml, .gitignore, the package scripts and the pinned dev tools in bun.lock). Complete the package: its name, one minimal entry point and one placeholder test. The entry point is the one the task names, by default `src/cli.ts` for a command-line tool (`bin` and `main` point to `dist/src/cli.js`) or `src/server.ts` for a service (`main` points to `dist/src/server.js` and `start` is `node dist/src/server.js`). Implement no feature. If the task names another stack, replace the default with it and keep the script names.\n- implement: write a failing test for each behaviour the task asks for, then the code that makes it pass.\n- repair: these checks fail; reproduce each one first, then fix the code, never the check (never weaken, skip or delete a test):\n  {{params.failing_checks}}\n\nThe stack, unless the task description names another one (then use that one and keep the same script names):\n- Bun installs, runs the scripts and the tests: `bun install`, `bun test`; tests are `test/<name>.test.ts` written with `bun:test`.\n- TypeScript in strict mode (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), ESM (`\"type\": \"module\"`), `module` and `moduleResolution` NodeNext. `tsc -p tsconfig.json` builds `src/` to `dist/`, so `main` and `bin` point into `dist/src/`; relative imports end in `.js`. A `bin` source starts with `#!/usr/bin/env node`, so the built package runs under Node as well as Bun.\n- oxlint lints and oxfmt formats; Zod validates every external input (arguments, files, environment, HTTP bodies).\n- Layers: `src/domain/` pure logic, `src/adapters/` IO, and the entry point (`src/cli.ts` or `src/server.ts`); small modules.\n- `package.json` scripts: `typecheck` (`tsc --noEmit -p tsconfig.json`), `lint` (`oxlint`), `format` (`oxfmt`), `format:check` (`oxfmt --check`), `build` (`tsc -p tsconfig.json`), `test` (`bun test`), `check` (typecheck, lint, format:check and test in one), and `start` for a server (`node dist/src/server.js`).\n\nThen run `bun run check`; it must pass. Do not commit.\nReport in the status file: `summary` (what you changed, one paragraph) and `checks` (each command you ran and its result, one per line).\n"
+  profile: null
+  max_retries: null
+  timeout_seconds: 1800
+  workdir: null
+  isolation: null
+  connectors: []
+  interactive: false
+- id: fork
+  title: Gates and review run side by side
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: condition
+- id: gates
+  title: Run the package's quality gates (script)
+  expected_duration: 2m
+  inputs: null
+  outputs: null
+  cache: null
+  type: script
+  script: scripts/gates.sh
+  runner: sh
+  timeout_seconds: 600
+- id: review
+  title: Review the change against the task (in parallel with the gates)
+  expected_duration: 3m
+  inputs: null
+  outputs:
+    files: []
+    fields:
+    - verdict
+    - summary
+    - findings
+  cache: null
+  type: agent_task
+  prompt: 'You review a change another agent made in your working directory. Do not edit any file.
+
+
+    The task is described at {{params.task_file}} (mode: {{params.mode}}); the change may touch only these paths:
+
+    {{params.owned_paths}}
+
+
+    Read the change with `git status` and `git diff` (new files included). Check:
+
+    1. Every behaviour the task asks for is implemented and covered by a test that would fail without it.
+
+    2. Nothing outside the owned paths changed.
+
+    3. No test, gate or lint rule was weakened, skipped or disabled.
+
+    4. External input is validated, errors are handled, and no code is dead or duplicated.
+
+
+    Report in the status file: `verdict` (`approve`, or `changes` only for a concrete defect from the list above), `summary` (one paragraph) and `findings` (each defect with its file and line, one per line; empty for approve).
+
+    '
+  profile: null
+  max_retries: null
+  timeout_seconds: 600
+  workdir: null
+  isolation: null
+  connectors: []
+  interactive: false
+- id: verdict
+  title: Gates and review joined into one verdict
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: condition
+- id: rounds
+  title: 'Fix rounds: two with Sonnet, then one with Opus; green gates with a review still asking end done'
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: condition
+- id: fix
+  title: Fix the gates and the review findings (Sonnet)
+  expected_duration: 5m
+  inputs: null
+  outputs:
+    files: []
+    fields:
+    - summary
+    - checks
+  cache: null
+  type: agent_task
+  prompt: 'The work in your working directory did not pass. The quality gates printed:
+
+
+    {{nodes.gates.output}}
+
+
+    The reviewer reported:
+
+
+    {{nodes.review.output}}
+
+
+    The task is described at {{params.task_file}} (mode: {{params.mode}}); you own only these paths:
+
+    {{params.owned_paths}}
+
+
+    Fix every failing gate and every review finding: the code, the types, the lint findings, the formatting (`bun run format`). Never weaken, skip or delete a test or a gate, and never disable a lint rule inline. Then run `bun run check`; it must pass. Do not commit.
+
+    Report in the status file: `summary` (each failure and its fix, one paragraph) and `checks` (each command you ran and its result, one per line).
+
+    '
+  profile: null
+  max_retries: null
+  timeout_seconds: 900
+  workdir: null
+  isolation: null
+  connectors: []
+  interactive: false
+- id: fix_strong
+  title: One root-cause fix round (Opus)
+  expected_duration: 8m
+  inputs: null
+  outputs:
+    files: []
+    fields:
+    - summary
+    - checks
+  cache: null
+  type: agent_task
+  prompt: 'Two rounds of fixes did not make the work in your working directory pass. Find the root cause rather than patching symptoms.
+
+
+    The quality gates printed:
+
+
+    {{nodes.gates.output}}
+
+
+    The reviewer reported:
+
+
+    {{nodes.review.output}}
+
+
+    The task is described at {{params.task_file}} (mode: {{params.mode}}); you own only these paths:
+
+    {{params.owned_paths}}
+
+
+    Read the task, the code and the tests again, decide what is actually wrong, and fix it. Never weaken, skip or delete a test or a gate, and never disable a lint rule inline. Then run `bun run check`; it must pass. Do not commit.
+
+    Report in the status file: `summary` (the root cause and the fix, one paragraph) and `checks` (each command you ran and its result, one per line).
+
+    '
+  profile:
+    name: claude-strong
+    scope: auto
+  max_retries: null
+  timeout_seconds: 1200
+  workdir: null
+  isolation: null
+  connectors: []
+  interactive: false
+- id: done
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: finish
+  outcome: success
+  prompt: null
+  profile: null
+- id: blocked
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: finish
+  outcome: failure
+  prompt: null
+  profile: null
+edges:
+- from: start
+  to: route
+  condition: null
+  fallback: false
+  join: null
+- from: route
+  to: stack
+  condition:
+    type: output_field
+    node: route
+    field: mode
+    equals: scaffold
+  fallback: false
+  join: null
+- from: route
+  to: build
+  condition:
+    type: node_status
+    node: route
+    equals: success
+  fallback: false
+  join: null
+- from: route
+  to: blocked
+  condition: null
+  fallback: true
+  join: null
+- from: stack
+  to: build
+  condition:
+    type: node_status
+    node: stack
+    equals: success
+  fallback: false
+  join: null
+- from: stack
+  to: blocked
+  condition: null
+  fallback: true
+  join: null
+- from: build
+  to: fork
+  condition: null
+  fallback: false
+  join: null
+- from: fork
+  to: gates
+  condition: null
+  fallback: false
+  join: null
+- from: fork
+  to: review
+  condition: null
+  fallback: false
+  join: null
+- from: gates
+  to: verdict
+  condition: null
+  fallback: false
+  join: all
+- from: review
+  to: verdict
+  condition: null
+  fallback: false
+  join: all
+- from: fix
+  to: fork
+  condition: null
+  fallback: false
+  join: null
+- from: fix_strong
+  to: fork
+  condition: null
+  fallback: false
+  join: null
+- from: verdict
+  to: rounds
+  condition: &id001
+    type: output_match
+    node: gates
+    pattern: 'GATES: red'
+  fallback: false
+  join: null
+- from: verdict
+  to: rounds
+  condition: &id002
+    type: output_field
+    node: review
+    field: verdict
+    equals: changes
+  fallback: false
+  join: null
+- from: verdict
+  to: done
+  condition: null
+  fallback: true
+  join: null
+- from: rounds
+  to: fix
+  condition: *id001
+  fallback: false
+  join: null
+  max_traversals: 2
+- from: rounds
+  to: fix
+  condition: *id002
+  fallback: false
+  join: null
+  max_traversals: 2
+- from: rounds
+  to: fix_strong
+  condition:
+    type: node_status
+    node: gates
+    equals: failure
+  fallback: false
+  join: null
+  max_traversals: 1
+- from: rounds
+  to: fix_strong
+  condition:
+    type: output_match
+    node: review
+    pattern: '"verdict":"changes"'
+  fallback: false
+  join: null
+  max_traversals: 1
+- from: rounds
+  to: done
+  condition:
+    type: output_match
+    node: gates
+    pattern: 'GATES: green'
+  fallback: false
+  join: null
+- from: rounds
+  to: blocked
+  condition: null
+  fallback: true
+  join: null

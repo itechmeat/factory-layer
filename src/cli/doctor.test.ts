@@ -17,7 +17,7 @@ test('a failing and a hanging check fail with their fix, the rest pass, and doct
       deadlineMs: 1000,
       fix: 'bun run apb:bootstrap',
       run: async () => {
-        throw new Error('playbook scaffold is not approved');
+        throw new Error('playbook build-task is not approved');
       },
     },
     {

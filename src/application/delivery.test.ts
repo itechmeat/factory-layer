@@ -106,7 +106,7 @@ describe('delivery gate', () => {
     const result = await run(ports);
 
     expect(result).toEqual({ runId: 'run-v', outcome: 'succeeded', reason: null, deliveredDir: OUT, verified: true });
-    expect(ports.checks.packageCalls.at(-1)).toEqual({ dir: COPY, runtimes: ['bun', 'npm'] });
+    expect(ports.checks.packageCalls.at(-1)).toEqual({ dir: COPY, runtimes: ['bun'] });
     expect((await ports.store.load('run-v'))?.intents).toEqual([]);
   });
 

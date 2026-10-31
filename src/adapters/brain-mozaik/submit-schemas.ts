@@ -2,7 +2,7 @@
  * The submit-tool schemas of the brain's decisions: the domain schemas
  * narrowed for the model and flattened into one object per tool call, and
  * the step that fills in what the core owns. A plan names only the
- * playbooks a plan may run (`scaffold`, `implement-task`) and carries no
+ * playbook a plan may run (`build-task`) and carries no
  * revisions: the adapter assigns them against the plan being replaced, and
  * a re-plan keeps every integrated task exactly as it was. Verdicts,
  * recovery choices and playbook proposals are flat objects the model fills
@@ -29,8 +29,8 @@ import { RecoveryChoiceSchema, type PlaybookDraft, type RecoveryChoice, type Ver
 import { PlanTaskSchema, type Plan, type PlanTask } from '../../domain/plan';
 import { isSpecExampleCheckId, SPEC_EXAMPLE_ID_PREFIX, unquotedParts } from '../../domain/spec-examples';
 
-/** The playbooks a plan may name. */
-export const PLAN_PLAYBOOKS = ['scaffold', 'implement-task'] as const;
+/** The playbooks a plan may name: one, which scaffolds the root task and implements the others. */
+export const PLAN_PLAYBOOKS = ['build-task'] as const;
 
 const PlanTaskSubmissionSchema = z.object({
   id: PlanTaskSchema.shape.id,

@@ -2,7 +2,9 @@
  * Independent verification of a delivered package, without the factory:
  * each runtime gets its own clean copy of the delivered directory (no
  * `node_modules`, no `.git`), installs it without lifecycle scripts,
- * builds it when it has a build script and runs its tests, and the spec
+ * builds it when it has a build script and runs its tests (the npm copy
+ * skips a test script that calls bun: the package is developed with Bun,
+ * and the npm copy proves the built output runs under Node), and the spec
  * examples run against the package's `bin` under Node in the npm copy (the
  * command name preferring one of the bin names the package declares).
  * Every step is a bounded child process with the same allowlisted
@@ -136,7 +138,8 @@ export async function verifyRuntime(runtime: Runtime, delivered: string, deadlin
     if (done.every((s) => s.passed) && pkg.scripts?.['build'] !== undefined) {
       done.push(await step(`${runtime} run build`, runtime, [runtime, 'run', 'build'], where, BUILD_TIMEOUT_MS, deadline));
     }
-    if (done.every((s) => s.passed)) {
+    const bunOnlyTests = runtime === 'npm' && /(^|&&|\|\||;)\s*bun\s/.test(`${pkg.scripts?.['test'] ?? ''} `);
+    if (done.every((s) => s.passed) && !bunOnlyTests) {
       const testArgv: [string, ...string[]] =
         runtime === 'npm' ? ['npm', 'test'] : hasTestScript ? ['bun', 'run', 'test'] : ['bun', 'test'];
       done.push(await step(testArgv.join(' '), runtime, testArgv, where, TEST_TIMEOUT_MS, deadline));

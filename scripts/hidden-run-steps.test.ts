@@ -202,7 +202,7 @@ describe('buildInPlace', () => {
     const before = readdirSync(dir).toSorted();
     const outcome = await buildInPlace(dir, Date.now() + 60_000);
     expect(outcome.ok).toBe(false);
-    expect(outcome.detail).toContain('npm run build: exit');
+    expect(outcome.detail).toContain('bun run build: exit');
     expect(outcome.detail).toContain('broken build');
     expect(readdirSync(dir).toSorted()).toEqual(before);
   }, 30_000);

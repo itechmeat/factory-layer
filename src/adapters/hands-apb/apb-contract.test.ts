@@ -58,7 +58,12 @@ const startedHandler: FakeHandler = async () => ({ ...answerOf('playbook_run-sta
 
 async function startedExecutor(handlers: Record<string, FakeHandler>): Promise<ApbExecutor> {
   const executor = new ApbExecutor(async () => new FakeApb({ playbook_run: startedHandler, ...handlers }), FAST);
-  await executor.startRun({ dispatchKey: 'k', playbook: 'implement-task', tree, inputs: { taskText: 't', ownedPaths: ['a'] } });
+  await executor.startRun({
+    dispatchKey: 'k',
+    playbook: 'build-task',
+    tree,
+    inputs: { taskText: 't', ownedPaths: ['a'], mode: 'implement' },
+  });
   return executor;
 }
 
@@ -72,9 +77,9 @@ describe('a recorded answer that loses a field the adapter reads fails with a va
     );
     const result = await executor.startRun({
       dispatchKey: 'k',
-      playbook: 'implement-task',
+      playbook: 'build-task',
       tree,
-      inputs: { taskText: 't', ownedPaths: ['a'] },
+      inputs: { taskText: 't', ownedPaths: ['a'], mode: 'implement' },
     });
     expect(result).toMatchObject({ ok: false, outcome: 'indeterminate' });
     expect(!result.ok && result.detail).toContain('MCP tool "playbook_run" returned an unexpected result');

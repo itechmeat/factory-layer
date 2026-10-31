@@ -35,7 +35,7 @@ const SCRIPT_NODE = '  - { id: sh, type: script, script: scripts/x.sh, runner: s
 
 function setUp(): FakePorts {
   const ports = fakePorts();
-  ports.playbooks.seed({ id: FORMAT_PLAYBOOK_ID, name: 'Implement a task', content: 'id: implement-task' });
+  ports.playbooks.seed({ id: FORMAT_PLAYBOOK_ID, name: 'Build a task', content: 'id: build-task' });
   ports.brain.script.playbook_review.defaultAnswer({ decision: { verdict: 'approve', reasons: ['the trial wrote the README'] } });
   return ports;
 }
@@ -84,7 +84,7 @@ describe('authorPlaybook', () => {
     const ports = setUp();
     ports.brain.script.playbook.answerWith({ decision: draft(FORMAT_PLAYBOOK_ID) });
     expect((await author(ports)).playbookId).toBe(D1);
-    expect((await ports.playbooks.get(FORMAT_PLAYBOOK_ID)).content).toBe('id: implement-task');
+    expect((await ports.playbooks.get(FORMAT_PLAYBOOK_ID)).content).toBe('id: build-task');
   });
 
   test('the Critic approving a failed trial does not approve the playbook', async () => {
