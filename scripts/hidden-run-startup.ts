@@ -13,7 +13,7 @@
  * server), and nothing keeps running when the check returns.
  */
 
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { connect, createServer } from 'node:net';
 import { dirname, join, resolve as resolvePath } from 'node:path';
 
@@ -58,6 +58,18 @@ export function commonDirOf(files: readonly string[]): string {
     prefix = kept;
   }
   return prefix.length === 0 ? '' : `${prefix.join('/')}/`;
+}
+
+/** True when any JavaScript file of the package outside node_modules calls `.listen(`: the package runs a server. */
+export function listensAnywhere(packageDir: string): boolean {
+  const entries = readdirSync(packageDir, { recursive: true, withFileTypes: true });
+  return entries.some(
+    (entry) =>
+      entry.isFile() &&
+      /\.[cm]?js$/.test(entry.name) &&
+      !entry.parentPath.split(/[\\/]/).includes('node_modules') &&
+      readFileSync(join(entry.parentPath, entry.name), 'utf8').includes('.listen('),
+  );
 }
 
 /** The bin files of one manifest: a string bin is the one file, a record bin lists its files. */
@@ -237,9 +249,10 @@ export async function startupCheck(repoRoot: string, files: readonly string[], d
       });
       if (install.exitCode !== 0 || install.timedOut) return { ok: false, detail: failedDetail(`npm ${installer}`, install) };
       const parts: string[] = [];
+      const startBins: string[] = [];
       for (const bin of binsOf(manifest.manifest)) {
         if (launchedByStart(bin, manifest.manifest, packageDir)) {
-          parts.push('server bin, covered by start');
+          startBins.push(bin);
           continue;
         }
         const outcome = await checkBin(bin, packageDir, env, Math.min(BIN_TIMEOUT_MS, deadlineMs - Date.now()));
@@ -254,6 +267,18 @@ export async function startupCheck(repoRoot: string, files: readonly string[], d
       const output = `${server.outcome.stdout}\n${server.outcome.stderr}`;
       const marker = markerIn(output);
       if (marker !== null) return { ok: false, detail: `npm run start: the output names ${marker}: ${outputTail(output)}` };
+      const exitedClean = !server.accepted && !server.outcome.timedOut && server.outcome.exitCode === 0;
+      if (exitedClean && startBins.length > 0 && !listensAnywhere(packageDir)) {
+        // `start` runs a command-line bin that did its work and exited: a CLI (no code listens), not a server that died.
+        for (const bin of startBins) {
+          const outcome = await checkBin(bin, packageDir, env, Math.min(BIN_TIMEOUT_MS, deadlineMs - Date.now()));
+          if (!outcome.ok) return outcome;
+          parts.push(outcome.detail);
+        }
+        parts.push('start runs the command-line tool and exited 0');
+        return { ok: true, detail: parts.join('; ') };
+      }
+      if (startBins.length > 0) parts.push('server bin, covered by start');
       if (!server.accepted) {
         const why = server.outcome.timedOut ? 'did not accept a connection in time' : 'exited before accepting a connection';
         return { ok: false, detail: `npm run start ${why}: ${outputTail(output)}` };

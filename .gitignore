@@ -29,3 +29,6 @@ hidden/**/.env.*
 .claude/worktrees/
 .claude/settings.local.json
 lefthook-local.yml
+
+# A saved hidden run for showing results on stage; never committed.
+/hidden-demo/
