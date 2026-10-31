@@ -1,0 +1,23 @@
+{
+  "name": "box-office",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/src/server.js",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "oxlint",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "build": "tsc -p tsconfig.json",
+    "test": "bun test",
+    "check": "bun run typecheck && bun run lint && bun run format:check && bun run test",
+    "start": "node dist/src/server.js"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "oxfmt": "0.75.0",
+    "oxlint": "1.90.0",
+    "typescript": "7.0.2"
+  }
+}
