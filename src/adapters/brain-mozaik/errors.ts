@@ -1,6 +1,7 @@
 /**
  * Typed brain inference errors, the classification of provider failures by
- * HTTP status, and the redaction of secrets from error text.
+ * HTTP status (and, for an exhausted balance sent as a plain 400, by its
+ * text), and the redaction of secrets from error text.
  *
  * Invariant: every message and cause a `BrainError` exposes has passed
  * through `redactSecrets`, so a provider key never appears in an error.
@@ -21,7 +22,7 @@ export type BrainErrorKind =
   | 'invalid_arguments'; // a function call's arguments failed their schema
 
 /** The provider failure class derived from the HTTP status. */
-export type ProviderFailure = 'auth' | 'request' | 'rate_limit' | 'unavailable' | 'network';
+export type ProviderFailure = 'auth' | 'budget' | 'request' | 'rate_limit' | 'unavailable' | 'network';
 
 interface BrainErrorDetails {
   readonly retryable: boolean;
@@ -59,9 +60,14 @@ export class BrainError extends Error {
 const WithStatus = z.object({ status: z.number().int() });
 const WithMessage = z.object({ message: z.string() });
 
-function failureOf(status: number | undefined): ProviderFailure {
+/** How providers word an exhausted balance or plan quota (Anthropic sends it as a 400). */
+const BUDGET_TEXT =
+  /credit balance|insufficient (balance|credits|funds)|out of credits|exceeded your (current )?quota|quota exceeded|usage limit|limit exhausted|payment required/i;
+
+function failureOf(status: number | undefined, text: string): ProviderFailure {
   if (status === undefined) return 'network';
   if (status === 401 || status === 403) return 'auth';
+  if (status === 402 || (status === 400 && BUDGET_TEXT.test(text))) return 'budget';
   if (status === 429) return 'rate_limit';
   if (status === 408 || status >= 500) return 'unavailable';
   return 'request';
@@ -69,6 +75,7 @@ function failureOf(status: number | undefined): ProviderFailure {
 
 const RETRYABLE: Readonly<Record<ProviderFailure, boolean>> = {
   auth: false,
+  budget: false,
   request: false,
   rate_limit: true,
   unavailable: true,
@@ -80,7 +87,7 @@ export function classifyProviderError(error: unknown, where: { provider: string;
   const status = WithStatus.safeParse(error).data?.status;
   const raw = WithMessage.safeParse(error).data?.message ?? String(error);
   const text = redactSecrets(raw, secrets);
-  const failure = failureOf(status);
+  const failure = failureOf(status, text);
   const cause = new Error(text);
   cause.name = error instanceof Error ? error.name : 'Error';
   const statusText = status === undefined ? 'no status' : `status ${String(status)}`;

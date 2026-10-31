@@ -250,8 +250,9 @@ personal notes.
 
 1. Concurrency: at most 3 APB task runs at once per spec, 4 in total;
    `max_parallel` 2 inside a run.
-2. Brain call deadline 90 s, 2 retries, then provider cooldown 60 s and the
-   fallback model.
+2. Brain call deadline 90 s, 2 retries, then provider cooldown and the
+   fallback model: 60 s after a rate limit, outage or timeout, 30 min after
+   a refused key or an exhausted balance.
 3. Task budget: 3 attempts (initial + 2 recoveries), then re-plan once, then
    the task is marked failed and the run continues with what passes.
 4. Supervisor wait slice 60 s; a task run with no event for 10 min is

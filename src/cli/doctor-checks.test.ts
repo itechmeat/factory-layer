@@ -3,7 +3,8 @@
  * major version, bash 3.x is a warning with the `brew install bash` hint, and
  * a missing or foreign shell fails; node must start under the scratch HOME in
  * the Node-only and the bun-runtime environments, a version-manager shim
- * included.
+ * included. The brain check retries once, as a run does, so a refused
+ * primary provider shows as a warning naming the fallback that answered.
  */
 
 import { afterAll, beforeAll, expect, test } from 'bun:test';
@@ -11,7 +12,9 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { bashReport, nodeStartReport } from './doctor-checks';
+import type { DecisionResult } from '../adapters/brain-mozaik/decision';
+import type { Usage } from '../adapters/brain-mozaik/response';
+import { bashReport, brainReport, nodeStartReport } from './doctor-checks';
 
 let scratch = '';
 
@@ -102,4 +105,36 @@ test('a node shim that needs the operator HOME starts the real node in both gene
   } finally {
     process.env['HOME'] = savedHome;
   }
+});
+
+function answeredBy(provider: string, model: string): DecisionResult<unknown> {
+  const usage: Usage = { kind: 'measured', input: 1, output: 1, cacheRead: 0, cacheWrite: 0 };
+  return { value: { ok: true }, usage: [{ at: '', role: 'critic', provider, model, elapsedMs: 1, usage }] };
+}
+
+test('the brain answering at once is ok and names the provider', async () => {
+  const report = await brainReport(async () => answeredBy('jigjoy', 'claude'), 'jigjoy/claude, zai/glm');
+  expect(report).toMatch(/^jigjoy\/claude answered through the submit tool in \d+ ms \(providers: jigjoy\/claude, zai\/glm\)$/);
+});
+
+test('a refused primary with a fallback that answers is a warning naming both', async () => {
+  let calls = 0;
+  const ask = async (): Promise<DecisionResult<unknown>> => {
+    calls += 1;
+    if (calls === 1) throw new Error('critic decision failed: jigjoy/claude failed (auth, status 401)');
+    return answeredBy('zai', 'glm');
+  };
+  const report = await brainReport(ask, 'jigjoy/claude, zai/glm');
+  if (typeof report === 'string') throw new Error('expected a warning');
+  expect(report.warning).toContain('zai/glm answered');
+  expect(report.warning).toContain('after the first attempt failed: critic decision failed: jigjoy/claude failed (auth, status 401)');
+});
+
+test('the brain failing twice fails the check with the last error', async () => {
+  let calls = 0;
+  const ask = async (): Promise<DecisionResult<unknown>> => {
+    calls += 1;
+    throw new Error(`down ${String(calls)}`);
+  };
+  await expect(brainReport(ask, 'zai/glm')).rejects.toThrow('down 2');
 });

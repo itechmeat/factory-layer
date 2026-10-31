@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { ModelContext, UserMessageItem } from '@mozaik-ai/core';
 
 import type { Clock } from '../../ports/index';
-import { GuardedInferenceRunner, PROVIDER_COOLDOWN_MS } from './runner';
+import { GuardedInferenceRunner, PROVIDER_COOLDOWN_MS, PROVIDER_DOWN_MS } from './runner';
 import { FakeEndpoint, PERMISSIVE } from './testing/fake-endpoint';
 
 function failingWith(status: number): FakeEndpoint {
@@ -51,8 +51,41 @@ describe('GuardedInferenceRunner: provider fallback and cooldown', () => {
     });
   }
 
-  test('a non-retryable failure of the primary keeps the primary', async () => {
-    const { runner } = setup(failingWith(401));
+  for (const [label, status] of [
+    ['a rejected key', 401],
+    ['a forbidden account', 403],
+    ['an exhausted balance', 402],
+  ] as const) {
+    test(`${label} of the primary routes later attempts to the fallback for the long cooldown`, async () => {
+      const { runner, advance } = setup(failingWith(status));
+      await tryOnce(runner);
+      expect(runner.chooseModel()).toBe('other');
+      advance(PROVIDER_DOWN_MS - 1);
+      expect(runner.chooseModel()).toBe('other');
+      advance(1);
+      expect(runner.chooseModel()).toBe('glm');
+    });
+  }
+
+  test('an outage after a refusal keeps the longer park', async () => {
+    const statuses = [401, 503];
+    const primary = new FakeEndpoint({
+      infer: async () => {
+        const status = statuses.shift() ?? 503;
+        throw Object.assign(new Error(`status ${String(status)}`), { status });
+      },
+    });
+    const { runner, advance } = setup(primary);
+    const late = ModelContext.create().addContextItem(UserMessageItem.create('hi'));
+    runner.bind(late);
+    await tryOnce(runner);
+    await runner.run({ model: 'glm', context: late }).catch(() => undefined);
+    advance(PROVIDER_COOLDOWN_MS);
+    expect(runner.chooseModel()).toBe('other');
+  });
+
+  test('a malformed request keeps the primary', async () => {
+    const { runner } = setup(failingWith(400));
     await tryOnce(runner);
     expect(runner.chooseModel()).toBe('glm');
   });
