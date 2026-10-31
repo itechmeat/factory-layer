@@ -1,6 +1,8 @@
 /**
  * The checks `factory doctor` runs before a run: the brain configuration and
- * one tiny decision (naming the provider and model that answered), Mozaik
+ * one tiny decision (naming the provider and model that answered; retried
+ * once as a run would, so a refused primary that the fallback covers is a
+ * warning, not a failure), Mozaik
  * Cloud off, on (a key with the opt-in) or refused (a key without it), `apb` on the PATH with its version
  * and an MCP handshake (each with its own budget), the starter playbooks
  * approved at their current versions and their default profile at its
@@ -19,6 +21,7 @@ import { z } from 'zod';
 import { cloudRedaction, mozaikCloudState, MozaikCloudKeyError } from '../adapters/brain-mozaik/cloud-guard';
 import { parseBrainConfig } from '../adapters/brain-mozaik/config';
 import { createMozaikDecider } from '../adapters/brain-mozaik/decider';
+import type { DecisionResult } from '../adapters/brain-mozaik/decision';
 import { apbMcpCommand } from '../adapters/hands-apb/apb-command';
 import { STARTER_PARAMS } from '../adapters/hands-apb/start-inputs';
 import { withScratchHome, type ChildEnv } from '../adapters/child-env';
@@ -37,7 +40,9 @@ const MCP_CONNECT_MS = 20_000;
 const MCP_CALL_MS = 10_000;
 /** A whole MCP check: the handshake, its calls and room for the close. */
 const MCP_CHECK_MS = MCP_CONNECT_MS + 3 * MCP_CALL_MS;
-const BRAIN_CHECK_MS = 45_000;
+/** One brain attempt of the check; two fit in its deadline. */
+const BRAIN_ATTEMPT_MS = 40_000;
+const BRAIN_CHECK_MS = 2 * BRAIN_ATTEMPT_MS + 5000;
 
 /** Runs `command` and returns its trimmed stdout; rejects on a non-zero exit or a missing binary. */
 async function output(command: readonly string[], signal: AbortSignal): Promise<string> {
@@ -105,6 +110,27 @@ export async function nodeStartReport(signal: AbortSignal): Promise<string> {
   });
 }
 
+/**
+ * Asks the brain, and once more when that fails, as a run's decision retry
+ * would: the runner then routes to the next provider. `order` lists the
+ * providers. Rejects with the second failure.
+ */
+export async function brainReport(ask: () => Promise<DecisionResult<unknown>>, order: string): Promise<string | DoctorWarning> {
+  const started = performance.now();
+  let firstFailure: string | undefined;
+  let result: DecisionResult<unknown>;
+  try {
+    result = await ask();
+  } catch (error) {
+    firstFailure = error instanceof Error ? error.message : String(error);
+    result = await ask();
+  }
+  const answered = result.usage.findLast((call) => call.failure === undefined);
+  const who = answered === undefined ? 'the brain' : `${answered.provider}/${answered.reportedModel ?? answered.model}`;
+  const report = `${who} answered through the submit tool in ${String(Math.round(performance.now() - started))} ms (providers: ${order})`;
+  return firstFailure === undefined ? report : { warning: `${report} after the first attempt failed: ${firstFailure}` };
+}
+
 /** Every doctor check for the factory rooted at `root`. */
 export function doctorChecks(root: string, env: Env): readonly DoctorCheck[] {
   return [
@@ -115,19 +141,16 @@ export function doctorChecks(root: string, env: Env): readonly DoctorCheck[] {
       run: async (signal) => {
         const config = parseBrainConfig(env);
         const decider = createMozaikDecider(config, systemClock, { env, cwd: process.cwd(), home: homedir() });
-        const started = performance.now();
-        const result = await decider.decide({
-          role: 'critic',
-          system: 'You check that the tools work. Call the submit tool with ok set to true.',
-          user: 'Check.',
-          schema: Ping,
-          deadlineMs: BRAIN_CHECK_MS - 5000,
-          signal,
-        });
-        const answered = result.usage.findLast((call) => call.failure === undefined);
-        const who = answered === undefined ? 'the brain' : `${answered.provider}/${answered.reportedModel ?? answered.model}`;
-        const order = config.providers.map((provider) => `${provider.name}/${provider.model}`).join(', ');
-        return `${who} answered through the submit tool in ${String(Math.round(performance.now() - started))} ms (providers: ${order})`;
+        const ask = (): Promise<DecisionResult<unknown>> =>
+          decider.decide({
+            role: 'critic',
+            system: 'You check that the tools work. Call the submit tool with ok set to true.',
+            user: 'Check.',
+            schema: Ping,
+            deadlineMs: BRAIN_ATTEMPT_MS,
+            signal,
+          });
+        return brainReport(ask, config.providers.map((provider) => `${provider.name}/${provider.model}`).join(', '));
       },
     },
     {

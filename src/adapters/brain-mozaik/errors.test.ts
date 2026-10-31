@@ -15,6 +15,7 @@ describe('classifyProviderError', () => {
     [401, 'auth', false],
     [403, 'auth', false],
     [400, 'request', false],
+    [402, 'budget', false],
     [404, 'request', false],
     [422, 'request', false],
     [408, 'unavailable', true],
@@ -35,6 +36,23 @@ describe('classifyProviderError', () => {
       expect(error.model).toBe('glm');
     });
   }
+
+  for (const message of [
+    'Your credit balance is too low to access the Anthropic API',
+    'Insufficient balance or no resource package',
+    'Usage limit reached for this billing period',
+    'Insufficient credits for this request',
+    'You are out of credits',
+    'You exceeded your current quota',
+  ]) {
+    test(`a 400 saying "${message}" is budget, not a bad request`, () => {
+      expect(classifyProviderError(statusError(400, message), where, redact).failure).toBe('budget');
+    });
+  }
+
+  test('a 400 that only mentions billing or quota is a bad request', () => {
+    expect(classifyProviderError(statusError(400, 'unknown field billing_tag; see the quota docs'), where, redact).failure).toBe('request');
+  });
 
   test('the key is redacted from the message and the cause', () => {
     const error = classifyProviderError(statusError(401, `Incorrect API key provided: ${KEY}`), where, redact);

@@ -6,7 +6,8 @@
  * deadline and a cancellation flag; failures are typed, redacted and
  * recorded on the attempt with unavailable usage; responses are validated
  * and their usage recorded; a provider that failed with a retryable outage
- * cools down, so the next attempt is routed to the fallback.
+ * cools down, and one whose key or balance was refused cools down for
+ * longer, so the next attempt is routed to the fallback.
  *
  * Mozaik 4.2.0 does not await or catch the loop it starts, so a runner error
  * inside a loop would become an unhandled rejection. An attempt bound with a
@@ -42,6 +43,8 @@ export const BRAIN_ATTEMPT_DEADLINE_MS = 90_000;
 export const STREAM_CLEANUP_MS = 1_000;
 /** How long a provider is skipped after a retryable outage (rate limit, unavailable, network, timeout), milliseconds. */
 export const PROVIDER_COOLDOWN_MS = 60_000;
+/** How long a provider is skipped after its key or balance was refused (auth, budget), milliseconds. */
+export const PROVIDER_DOWN_MS = 30 * 60_000;
 
 /** One configured model: the endpoint that serves it and what it accepts. */
 export interface BrainProvider {
@@ -67,6 +70,8 @@ export interface BindOptions {
 
 /** The provider failures after which a provider cools down. */
 const OUTAGES: ReadonlySet<string> = new Set(['rate_limit', 'unavailable', 'network']);
+/** The provider failures after which a provider is down until a human could have fixed the account. */
+const REFUSALS: ReadonlySet<string> = new Set(['auth', 'budget']);
 
 /** The output that ends a loop at idle after its attempt was settled with a failure. */
 function endOfAttempt(error: BrainError): InferenceOutput {
@@ -203,13 +208,16 @@ export class GuardedInferenceRunner implements InferenceRunner {
     }
   }
 
-  /** Records a failed call on its attempt, cools its provider down after an outage, and returns the typed error. */
+  /** Records a failed call on its attempt, cools its provider down after an outage or a refusal, and returns the typed error. */
   #failed(error: unknown, attempt: Attempt, ticket: number, provider: BrainProvider): BrainError {
     const brainError = this.#asBrainError(error, provider);
     const nowMs = this.#nowMs();
     attempt.fail(ticket, brainError.failure ?? brainError.kind, nowMs);
     if (brainError.kind === 'timeout' || (brainError.kind === 'provider' && OUTAGES.has(brainError.failure ?? ''))) {
-      this.#coolingUntilMs.set(provider.model, nowMs + this.#cooldownMs);
+      // A later outage never shortens a refusal's longer park.
+      this.#coolingUntilMs.set(provider.model, Math.max(this.#coolingUntilMs.get(provider.model) ?? 0, nowMs + this.#cooldownMs));
+    } else if (brainError.kind === 'provider' && REFUSALS.has(brainError.failure ?? '')) {
+      this.#coolingUntilMs.set(provider.model, nowMs + PROVIDER_DOWN_MS);
     }
     return brainError;
   }
