@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/brand/banner.png" alt="Factory Layer: an autonomous software factory. A one-page spec in, a project with green tests out." width="100%"></p>
+
 # Factory Layer
 
 A software factory: give it a one-page product spec in Markdown and, with
