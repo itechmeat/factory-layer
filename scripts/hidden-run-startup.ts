@@ -1,6 +1,8 @@
 /**
  * The startup check of the hidden run: exactly the committable files of one
- * delivery are copied into a scratch directory, installed without lifecycle
+ * delivery are copied into a scratch directory, installed as a grader would
+ * (`npm ci` against the lock file, which catches a lock out of step with
+ * package.json; `npm install` without one) and without lifecycle
  * scripts in the Node-only environment (no bun on the PATH), every declared
  * bin is started with `node <bin> --help` and stdin closed (a module or syntax error, or a
  * nonzero exit with an uncaught exception, fails it; a bin the start script
@@ -11,9 +13,8 @@
  * server), and nothing keeps running when the check returns.
  */
 
-import { cpSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { connect, createServer } from 'node:net';
-import { tmpdir } from 'node:os';
 import { dirname, join, resolve as resolvePath } from 'node:path';
 
 import { runCommand } from '../src/adapters/check-runner/process';
@@ -21,7 +22,15 @@ import { withScratchHome } from '../src/adapters/child-env';
 import type { CommandOutcome } from '../src/ports/check-runner';
 import { nodeOnlyEnv } from '../src/adapters/node-only-env';
 import { npmArgs } from '../src/adapters/package-guard';
-import { INSTALL_TIMEOUT_MS, failedDetail, outputTail, readManifest, type PackageManifestType, type StepOutcome } from './hidden-run-steps';
+import {
+  INSTALL_TIMEOUT_MS,
+  failedDetail,
+  outputTail,
+  readManifest,
+  realTempDir,
+  type PackageManifestType,
+  type StepOutcome,
+} from './hidden-run-steps';
 
 /** The timeout of one `node <bin> --help` run, in milliseconds. */
 export const BIN_TIMEOUT_MS = 10_000;
@@ -200,11 +209,11 @@ async function startServer(packageDir: string, home: string, port: number, bound
 }
 
 /**
- * Copy of exactly `files` into a temp dir, `npm install --ignore-scripts`, then each bin as `node <bin> --help` (stdin closed, 10 s; a bin the start script launches is skipped) and, with scripts.start, `npm run start` on a free PORT until a TCP connection is accepted (15 s); the server group is then killed. The whole check is bounded by `deadlineMs`.
+ * Copy of exactly `files` into a temp dir, `npm ci --ignore-scripts` (as a grader installs; `npm install` when there is no package-lock.json), then each bin as `node <bin> --help` (stdin closed, 10 s; a bin the start script launches is skipped) and, with scripts.start, `npm run start` on a free PORT until a TCP connection is accepted (15 s); the server group is then killed. The whole check is bounded by `deadlineMs`.
  */
 export async function startupCheck(repoRoot: string, files: readonly string[], deadlineMs: number): Promise<StepOutcome> {
   if (files.length === 0) return { ok: false, detail: 'no committable files' };
-  const copyDir = mkdtempSync(join(tmpdir(), 'factory-hidden-startup-'));
+  const copyDir = realTempDir('factory-hidden-startup-');
   try {
     for (const file of files) {
       const target = join(copyDir, file);
@@ -216,16 +225,17 @@ export async function startupCheck(repoRoot: string, files: readonly string[], d
     if (!manifest.ok) return manifest.outcome;
     return await withScratchHome(async (home) => {
       const env = nodeOnlyEnv(home, { NO_COLOR: '1', FORCE_COLOR: '0' });
+      const installer = existsSync(join(packageDir, 'package-lock.json')) ? 'ci' : 'install';
       const install = await runCommand({
         command: 'npm',
-        args: npmArgs(packageDir, ['install', '--ignore-scripts']),
+        args: npmArgs(packageDir, [installer, '--ignore-scripts']),
         cwd: packageDir,
         timeoutMs: Math.min(INSTALL_TIMEOUT_MS, deadlineMs - Date.now()),
         env,
         secrets: [],
         stdin: '',
       });
-      if (install.exitCode !== 0 || install.timedOut) return { ok: false, detail: failedDetail('npm install', install) };
+      if (install.exitCode !== 0 || install.timedOut) return { ok: false, detail: failedDetail(`npm ${installer}`, install) };
       const parts: string[] = [];
       for (const bin of binsOf(manifest.manifest)) {
         if (launchedByStart(bin, manifest.manifest, packageDir)) {

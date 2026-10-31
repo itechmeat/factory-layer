@@ -8,7 +8,7 @@
  * changes git state.
  */
 
-import { copyFileSync, cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { z } from 'zod';
@@ -238,6 +238,15 @@ export function failedDetail(label: string, outcome: CommandOutcome): string {
   return `${label}: ${code}${cause}${tail === '' ? '' : `: ${tail}`}`;
 }
 
+/**
+ * A new temp dir by its real path. npm resolves `--prefix` through symlinks,
+ * so under a linked temp root (`/var` -> `/private/var` on macOS) the raw
+ * path would put `../../private/var/...` keys into package-lock.json.
+ */
+export function realTempDir(prefix: string): string {
+  return realpathSync(mkdtempSync(join(tmpdir(), prefix)));
+}
+
 /** True for the temp entries the copies and the copy-back always leave out. */
 function notDeliveryEntry(path: string): boolean {
   return !['node_modules', '.git'].includes(basename(path));
@@ -247,7 +256,7 @@ function notDeliveryEntry(path: string): boolean {
  * Copy of dir without node_modules and .git to a temp dir, `npm install --ignore-scripts`, `npm run build` when package.json has a build script, then every file copied back except node_modules and .git. No build script: ok, detail "no build script".
  */
 export async function buildInPlace(dir: string, deadlineMs: number): Promise<StepOutcome> {
-  const copyDir = mkdtempSync(join(tmpdir(), 'factory-hidden-build-'));
+  const copyDir = realTempDir('factory-hidden-build-');
   try {
     cpSync(dir, copyDir, { recursive: true, filter: notDeliveryEntry });
     const manifest = readManifest(copyDir, 'the delivery');

@@ -5,11 +5,13 @@
  * committable files (and drop tracked paths missing on disk), the in-place
  * build puts the built files back (and leaves the delivery untouched when
  * the build fails), a failed copy back or a malformed manifest is a failed
- * step, and the table marks unfinished steps.
+ * step, the build copy lives at the real path of a symlinked temp root
+ * (macOS /var), so npm writes node_modules keys into the lock file, and
+ * the table marks unfinished steps.
  */
 
 import { afterAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -22,6 +24,7 @@ import {
   planSpecs,
   readManifest,
   realGit,
+  realTempDir,
   renderTable,
   rewriteGitignore,
 } from './hidden-run-steps';
@@ -161,6 +164,24 @@ describe('committableFiles and ignoredFiles', () => {
     writeFileSync(join(repo, 'hidden', 'x', 'kept.js'), 'exports.x = 1;\n');
     const git = async (): Promise<string> => 'hidden/x/kept.js\0hidden/x/gone.js\0';
     expect(await committableFiles(git, repo, 'hidden/x')).toEqual(['hidden/x/kept.js']);
+  });
+});
+
+describe('realTempDir', () => {
+  test('a temp root behind a symlink, as /var on macOS, gives the real path npm will resolve', () => {
+    const root = makeRoot();
+    mkdirSync(join(root, 'real-tmp'));
+    symlinkSync(join(root, 'real-tmp'), join(root, 'linked-tmp'));
+    const saved = process.env['TMPDIR'];
+    process.env['TMPDIR'] = join(root, 'linked-tmp');
+    let dir = '';
+    try {
+      dir = realTempDir('factory-hidden-build-');
+    } finally {
+      if (saved === undefined) delete process.env['TMPDIR'];
+      else process.env['TMPDIR'] = saved;
+    }
+    expect(dir.startsWith(join(realpathSync(root), 'real-tmp', 'factory-hidden-build-'))).toBe(true);
   });
 });
 
