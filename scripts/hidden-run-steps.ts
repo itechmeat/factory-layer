@@ -339,7 +339,7 @@ export function renderTable(rows: readonly HiddenRow[]): string {
 /** The owner's steps: review the table, `git add hidden/`, commit, push, check the remote commit lists every hidden/<name>/. */
 export const OWNER_STEPS = [
   'Owner steps:',
-  '1. Review the table above.',
+  '1. Review the table above and hidden/REPORT.md.',
   '2. git add hidden/',
   '3. Commit and push.',
   '4. Check the remote commit lists every hidden/<name>/ file.',

@@ -13,6 +13,7 @@ import {
   BRAIN_ABORT_GRACE_MS,
   BRAIN_DECISION_DEADLINE_MS,
   BRAIN_DECISION_RETRIES,
+  BRAIN_PLAN_RETRIES,
   type DecisionKind,
   type RecoveryChoice,
   type TraceEvent,
@@ -93,7 +94,8 @@ export interface BoundedDecisionInfo<D> {
  * Runs one brain decision bounded: it emits decision_started, races the call
  * against the deadline (the run's resolved one, BRAIN_DECISION_DEADLINE_MS by
  * default) and retries it up to
- * BRAIN_DECISION_RETRIES times on any failure, then emits decision_ended with
+ * BRAIN_DECISION_RETRIES times (BRAIN_PLAN_RETRIES for the plan, which the
+ * run cannot go on without) on any failure, then emits decision_ended with
  * the collected usage. The caller's signal cancels at once with reason
  * 'cancelled' and no further attempts; an attempt whose deadline fired
  * reports 'timeout' (a call answering after the deadline loses its decision
@@ -156,7 +158,8 @@ async function runAttempts<D>(info: BoundedDecisionInfo<D>, usage: UsageRecord[]
     return { ok: true, decision: settled.decision, usage: [...usage, ...settled.usage], attempts: attempt };
   }
   usage.push(...settled.records);
-  if (settled.tag === 'cancelled' || attempt > BRAIN_DECISION_RETRIES) {
+  const retries = info.kind === 'plan' ? BRAIN_PLAN_RETRIES : BRAIN_DECISION_RETRIES;
+  if (settled.tag === 'cancelled' || attempt > retries) {
     return defaultOutcome(settled.reason, settled.detail, usage, attempt);
   }
   return runAttempts(info, usage, attempt + 1);

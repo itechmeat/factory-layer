@@ -5,9 +5,9 @@ The single source of instructions for coding agents in this repository.
 
 ## What this is
 
-`factory-layer` is a software factory: it takes a one-page product spec and
-autonomously produces a small TypeScript project (a CLI or an HTTP API) whose
-tests pass. A brain of concurrent Mozaik agents decides, APB (driven through
+Factory Layer (`factory-layer`) is a software factory: it takes a one-page
+product spec and autonomously produces a small TypeScript project (a CLI or an
+HTTP API) whose tests pass. A brain of concurrent Mozaik agents decides, APB (driven through
 `apb mcp`) does the coding work, OSB keeps the memory of past runs. Design:
 `docs/superpowers/specs/2026-10-30-factory-layer-design.md`.
 

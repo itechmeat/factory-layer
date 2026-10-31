@@ -74,6 +74,9 @@ describe('runHidden', () => {
     expect(gitArgs.length).toBeGreaterThan(0);
     expect(gitArgs.every((args) => args[0] === 'ls-files')).toBe(true);
     expect(writes.join('\n')).toContain('Owner steps:');
+    const report = readFileSync(join(repo, 'hidden', 'REPORT.md'), 'utf8');
+    expect(report).toContain('[report](factory-trace/deliver-js/report.md)');
+    expect(readFileSync(join(repo, 'hidden', 'factory-trace', 'deliver-http', 'report.md'), 'utf8')).toBe('# Run deliver-http-fake\n');
   }, 120_000);
 
   test('a factory killed at the hard deadline still prints the table', async () => {

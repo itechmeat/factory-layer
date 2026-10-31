@@ -4,7 +4,8 @@
  * deadline, then each delivery is made committable (`.gitignore` with
  * `node_modules/`, built files copied back) and checked (ignored files,
  * startup on exactly the committable files), all by the report time; the
- * table and the owner's steps are printed. A non-empty hidden/<name> is
+ * table and the owner's steps are printed, and each run's report and trace
+ * are copied next to the deliveries with `hidden/REPORT.md` linking them. A non-empty hidden/<name> is
  * refused unless `--replace` is given and it holds the factory's delivery
  * marker; then it is removed first. Invariant: the script changes
  * nothing in git and every wait is bounded by the hard deadline or the
@@ -21,6 +22,7 @@ import { killLiveProcessGroups, runCommand } from '../src/adapters/check-runner/
 import type { CommandOutcome } from '../src/ports/check-runner';
 import { parseClockTime } from '../src/domain/clock-time';
 import { startupCheck } from './hidden-run-startup';
+import { publishTrace, runIdOf, TRACE_DIR, type PublishOutcome } from './hidden-run-trace';
 import {
   OWNER_STEPS,
   buildInPlace,
@@ -77,11 +79,20 @@ class LinePrefixer {
   }
 }
 
+/** How much of a factory's stdout is kept to find its run id. */
+const RUN_ID_SCAN_BYTES = 64 * 1024;
+
 /** The leader pids of the factories still running, for the Ctrl-C forwarding of the CLI. */
 const liveFactoryPids = new Set<number>();
 
+/** One factory's outcome and the run id it printed (null when it printed none). */
+interface FactoryRun {
+  readonly outcome: CommandOutcome;
+  readonly runId: string | null;
+}
+
 /** Starts one factory for its spec copy and prefixes its live output, one prefixer per stream so partial lines never mix. */
-async function runFactory(options: HiddenOptions, plan: SpecPlan): Promise<CommandOutcome> {
+async function runFactory(options: HiddenOptions, plan: SpecPlan): Promise<FactoryRun> {
   if (options.factoryCommand.length === 0) throw new Error('factoryCommand is empty');
   const [command, ...args] = factoryArgv(options.factoryCommand, plan, options.cutoff, options.taskConcurrency);
   const prefixers = {
@@ -89,6 +100,7 @@ async function runFactory(options: HiddenOptions, plan: SpecPlan): Promise<Comma
     stderr: new LinePrefixer(`[${plan.name}] `, options.write),
   };
   let pid: number | undefined;
+  let stdout = '';
   const outcome = await runCommand({
     command: command ?? '',
     args,
@@ -102,12 +114,17 @@ async function runFactory(options: HiddenOptions, plan: SpecPlan): Promise<Comma
       pid = started;
       liveFactoryPids.add(started);
     },
-    onOutput: (chunk, stream) => prefixers[stream].add(chunk.toString('utf8')),
+    onOutput: (chunk, stream) => {
+      const text = chunk.toString('utf8');
+      // The run id comes first; the head of stdout is enough, the rest is never kept.
+      if (stream === 'stdout' && stdout.length < RUN_ID_SCAN_BYTES && runIdOf(stdout) === null) stdout += text;
+      prefixers[stream].add(text);
+    },
   });
   if (pid !== undefined) liveFactoryPids.delete(pid);
   prefixers.stdout.flush();
   prefixers.stderr.flush();
-  return outcome;
+  return { outcome, runId: runIdOf(stdout) };
 }
 
 /** The factory cell of a row: killed at the hard deadline, a spawn failure, or the exit code. */
@@ -165,6 +182,15 @@ export function failureDetails(rows: readonly HiddenRow[]): readonly string[] {
   return lines;
 }
 
+/** The line about the reports and traces: where they are, or why they are not there (null: the report time came first). */
+function publicationLine(options: HiddenOptions, outcome: PublishOutcome | null): string {
+  if (outcome?.ok === true) {
+    return `Reports and traces: ${relative(options.repoRoot, join(options.hiddenDir, 'REPORT.md'))}, ${relative(options.repoRoot, join(options.hiddenDir, TRACE_DIR))}/`;
+  }
+  const why = outcome === null ? 'the report time came first' : outcome.reason;
+  return `Reports and traces not published (${why}); each run's report stays under runs/<runId>/.`;
+}
+
 /** What one hidden run produced: one row per spec and the exit code. */
 export interface HiddenResult {
   readonly rows: readonly HiddenRow[];
@@ -188,10 +214,22 @@ export async function runHidden(options: HiddenOptions): Promise<HiddenResult> {
     for (const [index, plan] of plans.entries()) {
       const factory = factories[index];
       if (factory === undefined) throw new Error(`no factory outcome for ${plan.name}`);
-      rows.push(await rowFor(options, plan, factory));
+      rows.push(await rowFor(options, plan, factory.outcome));
     }
-    options.write(renderTable(rows));
-    for (const line of failureDetails(rows)) options.write(line);
+    const table = renderTable(rows);
+    const details = failureDetails(rows);
+    options.write(table);
+    for (const line of details) options.write(line);
+    const entries = plans.map((plan, index) => ({ name: plan.name, runId: factories[index]?.runId ?? null }));
+    const traceOptions = {
+      repoRoot: options.repoRoot,
+      hiddenDir: options.hiddenDir,
+      factoryCommand: options.factoryCommand,
+      env: scriptEnv(),
+      deadlineMs: options.reportByMs,
+    };
+    const published = await beforeReport(options, async () => publishTrace(traceOptions, entries, table, details, new Date()));
+    options.write(publicationLine(options, published));
     options.write(OWNER_STEPS);
     const clean = rows.every((row) => row.delivered && row.build?.ok === true && row.ignored?.length === 0 && row.startup?.ok === true);
     return { rows, exitCode: clean ? 0 : 1 };
