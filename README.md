@@ -34,7 +34,8 @@ flowchart LR
    retried, repaired or re-planned. The
    brain only decides; the application is the single writer of the run's
    state.
-2. **Hands.** APB (Agentic Playbooks), driven through `apb mcp`, does the
+2. **Hands.** [Agentic Playbooks](https://github.com/itechmeat/agentic-playbooks)
+   (APB), driven through `apb mcp`, does the
    coding work. Each task is a `build-task` run: a coding agent builds,
    the package's quality gates and a reviewer agent run side by side, and
    up to two fix rounds on Sonnet are followed by one root-cause round on
@@ -42,7 +43,8 @@ flowchart LR
 3. **Integration.** An accepted task is merged onto `main` only when the
    package steps and every check that passed before still pass. A merge
    conflict goes to the `integrate` playbook.
-4. **Memory.** Open Second Brain recalls similar past runs before planning
+4. **Memory.** [Open Second Brain](https://github.com/itechmeat/open-second-brain)
+   (OSB) recalls similar past runs before planning
    and remembers each outcome, in a vault of the factory's own.
 5. **Delivery.** A clean copy of `main` is installed, built, tested and
    checked, then copied to the output directory.
