@@ -171,6 +171,12 @@ function main(): void {
   const mode = (readFileSync(specPath, 'utf8').split('\n')[0] ?? '').replace(/^mode:\s*/, '').trim();
   mkdirSync(outDir, { recursive: true });
   const name = basename(outDir);
+  // Like the real factory: the run id first, the report and trace under runs/<id>/ of the working directory.
+  const runId = `${name}-fake`;
+  mkdirSync(join('runs', runId), { recursive: true });
+  writeFileSync(join('runs', runId, 'report.md'), `# Run ${runId}\n`);
+  writeFileSync(join('runs', runId, 'trace.jsonl'), '{}\n');
+  console.log(`run id: ${runId}`);
   switch (mode) {
     case 'deliver-js':
       writeDeliverJs(outDir, name);

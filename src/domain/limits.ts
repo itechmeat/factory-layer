@@ -13,6 +13,11 @@ export const BRAIN_DECISION_DEADLINE_MS = 90_000;
 export const BRAIN_ABORT_GRACE_MS = 5_000;
 /** Retries after a failed brain decision attempt. */
 export const BRAIN_DECISION_RETRIES = 2;
+/**
+ * Retries of the initial plan: without a plan the run ends at once, so a
+ * provider that hangs (the next attempt goes to the fallback) gets more chances.
+ */
+export const BRAIN_PLAN_RETRIES = 5;
 /** Attempts per task: the first try plus this many recoveries. */
 export const TASK_ATTEMPT_BUDGET = 3;
 /** Runtime re-plans per run (a correction of an invalid first plan is separate). */

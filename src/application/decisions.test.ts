@@ -4,6 +4,7 @@ import {
   BRAIN_ABORT_GRACE_MS,
   BRAIN_DECISION_DEADLINE_MS,
   BRAIN_DECISION_RETRIES,
+  BRAIN_PLAN_RETRIES,
   RecoveryChoiceSchema,
   type UsageRecord,
   type Verdict,
@@ -41,10 +42,10 @@ function env(): Env {
 function decide(
   environment: Env,
   call: (signal: AbortSignal) => BrainDecision<Verdict> | Promise<BrainDecision<Verdict>>,
-  overrides: { readonly signal?: AbortSignal; readonly deadlineMs?: number } = {},
+  overrides: { readonly signal?: AbortSignal; readonly deadlineMs?: number; readonly kind?: 'judge' | 'plan' } = {},
 ): Promise<DecisionOutcome<Verdict>> {
   return boundedDecision<Verdict>({
-    kind: 'judge',
+    kind: overrides.kind ?? 'judge',
     decisionId: 'decision-1',
     runId: 'run-1',
     correlation: { taskId: 'task-1', revision: 1, attempt: 1 },
@@ -157,6 +158,22 @@ describe('boundedDecision', () => {
     const ended = environment.sink.ofType('decision_ended')[0];
     expect(ended?.at).toBe('2026-01-01T00:04:30.000Z');
     expect(ended?.outcome).toBe('defaulted');
+  });
+
+  test('the plan, which the run cannot go on without, gets more attempts than other decisions', async () => {
+    const environment = env();
+    environment.brain.script.judge.defaultAnswer({ decision: { outcome: 'accept' }, delayMs: 10 * BRAIN_DECISION_DEADLINE_MS });
+    const pending = decide(environment, (signal) => environment.brain.judge(aTask(), anExecutorReport(), [], signal), { kind: 'plan' });
+
+    for (let round = 0; round < 1 + BRAIN_PLAN_RETRIES; round += 1) {
+      await settleMicrotasks();
+      environment.clock.advanceMs(BRAIN_DECISION_DEADLINE_MS);
+    }
+    const outcome = await pending;
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome.attempts).toBe(1 + BRAIN_PLAN_RETRIES);
+    expect(BRAIN_PLAN_RETRIES).toBeGreaterThan(BRAIN_DECISION_RETRIES);
   });
 
   test('a deadline from the run options replaces the constant', async () => {
