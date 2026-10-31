@@ -4,8 +4,9 @@
  * bin that prints its usage and exits 1 passes, a server bin the start script
  * launches is covered by the start check, a CLI bin runs with stdin closed and
  * a hanging one times out, an HTTP package is accepted on the loopback, a Bun-only start script fails in the Node-only
- * environment (no bun on the PATH), and a lock file out of step with
- * package.json fails the install as `npm ci` would for a grader.
+ * environment (no bun on the PATH), a lock file out of step with
+ * package.json fails the install as `npm ci` would for a grader, and a
+ * start script that runs a command-line bin which exits 0 is a CLI.
  */
 
 import { afterAll, describe, expect, test } from 'bun:test';
@@ -85,6 +86,21 @@ describe('startupCheck', () => {
     const outcome = await startupCheck(root, deliver(root, 'deliver-http'), Date.now() + 60_000);
     expect(outcome.ok).toBe(true);
     expect(outcome.detail).toContain('accepted a connection');
+  }, 30_000);
+
+  test('a command-line bin that the start script runs and that exits 0 is a CLI, checked with --help', async () => {
+    const root = makeRoot();
+    const outcome = await startupCheck(root, deliver(root, 'cli-start'), Date.now() + 60_000);
+    expect(outcome.ok).toBe(true);
+    expect(outcome.detail).toContain('exited 0');
+    expect(outcome.detail).toContain('start runs the command-line tool and exited 0');
+  }, 30_000);
+
+  test('a server bin that exits 0 before it listens is still a failed server, not a CLI', async () => {
+    const root = makeRoot();
+    const outcome = await startupCheck(root, deliver(root, 'dead-server-bin'), Date.now() + 60_000);
+    expect(outcome.ok).toBe(false);
+    expect(outcome.detail).toContain('exited before accepting a connection');
   }, 30_000);
 
   test('a server bin that the start script launches is not run with --help', async () => {

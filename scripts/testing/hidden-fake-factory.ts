@@ -64,6 +64,22 @@ function writeDeliverJs(outDir: string, name: string): void {
   writeFileSync(join(outDir, 'cli.js'), "process.stdout.write('fake-cli: ready\\n');\n");
 }
 
+/** The files of `mode: cli-start`: a command-line bin that the start script also runs; it prints and exits 0. */
+function writeCliStart(outDir: string, name: string): void {
+  writeFileSync(join(outDir, '.gitignore'), DELIVERY_GITIGNORE);
+  const manifest = { name, version: '1.0.0', private: true, bin: 'cli.js', scripts: { start: 'node cli.js' } };
+  writeFileSync(join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  writeFileSync(join(outDir, 'cli.js'), "process.stdout.write('fake-cli: done\\n');\n");
+}
+
+/** The files of `mode: dead-server-bin`: a server bin that the start script runs, which exits 0 before it listens. */
+function writeDeadServerBin(outDir: string, name: string): void {
+  writeFileSync(join(outDir, '.gitignore'), DELIVERY_GITIGNORE);
+  const manifest = { name, version: '1.0.0', private: true, bin: 'cli.js', scripts: { start: 'node cli.js' } };
+  writeFileSync(join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  writeFileSync(join(outDir, 'cli.js'), "const server = require('node:http').createServer();\nif (process.env.NEVER) server.listen(0);\n");
+}
+
 /** The files of `mode: deliver-build`: a build script that produces the bin. */
 function writeDeliverBuild(outDir: string, name: string): void {
   writeFileSync(join(outDir, '.gitignore'), DELIVERY_GITIGNORE);
@@ -192,6 +208,12 @@ function main(): void {
       break;
     case 'server-bin':
       writeServerBin(outDir, name);
+      break;
+    case 'cli-start':
+      writeCliStart(outDir, name);
+      break;
+    case 'dead-server-bin':
+      writeDeadServerBin(outDir, name);
       break;
     case 'server-main-bin':
       writeServerMainBin(outDir, name);
