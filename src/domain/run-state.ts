@@ -61,6 +61,7 @@ export const DispatchRequestSchema = z.object({
   playbook: z.string().min(1),
   inputs: z.object({
     taskText: z.string(),
+    mode: z.enum(['scaffold', 'implement', 'repair']).optional(),
     ownedPaths: z.array(z.string()),
     failingChecks: z.array(z.object({ id: z.string(), reason: z.string() })).optional(),
     conflictPaths: z.array(z.string()).optional(),

@@ -15,6 +15,8 @@ import type { UsageRecord } from '../domain/usage';
  */
 export interface ExecutorStartInputs {
   readonly taskText: string;
+  /** What the run does with the task: set up the package, build the task, or fix failing checks. */
+  readonly mode?: 'scaffold' | 'implement' | 'repair';
   readonly ownedPaths: readonly string[];
   readonly failingChecks?: readonly { readonly id: string; readonly reason: string }[];
   readonly conflictPaths?: readonly string[];

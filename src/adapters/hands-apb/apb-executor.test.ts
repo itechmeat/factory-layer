@@ -27,9 +27,9 @@ function executorOver(apb: FakeApb): ApbExecutor {
 function input(overrides: Partial<StartRunInput> = {}): StartRunInput {
   return {
     dispatchKey: 'run-1/t1/1/1',
-    playbook: 'implement-task',
+    playbook: 'build-task',
     tree,
-    inputs: { taskText: '# Task\nDo it.', ownedPaths: ['src/a.ts', 'src/a.test.ts'] },
+    inputs: { taskText: '# Task\nDo it.', ownedPaths: ['src/a.ts', 'src/a.test.ts'], mode: 'implement' },
     ...overrides,
   };
 }
@@ -47,10 +47,15 @@ describe('startRun', () => {
     const { executor, apb } = await startedExecutor({ supervisor_wait_event: async () => answerOf('supervisor_wait_event-parked') });
     expect(readFileSync(join(tree, '.factory/task.md'), 'utf8')).toBe('# Task\nDo it.\n');
     expect(apb.callsTo('playbook_run')[0]?.args).toEqual({
-      id: 'implement-task',
+      id: 'build-task',
       supervise: 'self',
       worktree: tree,
-      params: { task_file: '.factory/task.md', owned_paths: 'src/a.ts\nsrc/a.test.ts' },
+      params: {
+        task_file: '.factory/task.md',
+        owned_paths: 'src/a.ts\nsrc/a.test.ts',
+        mode: 'implement',
+        failing_checks: NO_FAILING_CHECKS,
+      },
     });
     await executor.waitEvent(RUN_ID, 8, 100);
     expect(apb.callsTo('supervisor_wait_event')[0]?.secrets).toEqual([TOKEN]);
@@ -58,10 +63,10 @@ describe('startRun', () => {
 
   test('a hint-only repair (no check has run) starts with failing_checks pointing at the failure in the task file', async () => {
     const apb = new FakeApb({ playbook_run: started });
-    const result = await executorOver(apb).startRun(input({ playbook: 'repair' }));
+    const result = await executorOver(apb).startRun(input({ inputs: { taskText: 't', ownedPaths: ['a.ts'], mode: 'repair' } }));
     expect(result.ok).toBe(true);
     const [params] = apb.callsTo('playbook_run').map((call) => call.args['params']);
-    expect(params).toMatchObject({ failing_checks: NO_FAILING_CHECKS });
+    expect(params).toMatchObject({ mode: 'repair', failing_checks: NO_FAILING_CHECKS });
   });
 
   test('failing checks and conflict paths go one per line', async () => {
@@ -71,14 +76,14 @@ describe('startRun', () => {
       { id: 'c1', reason: 'exit 1' },
       { id: 'c2', reason: 'timeout' },
     ];
-    await executor.startRun(input({ playbook: 'repair', inputs: { taskText: 't', ownedPaths: ['a.ts'], failingChecks } }));
+    await executor.startRun(input({ inputs: { taskText: 't', ownedPaths: ['a.ts'], mode: 'repair', failingChecks } }));
     const integrateTree = join(tree, 'integrate');
     mkdirSync(integrateTree, { recursive: true });
     await executor.startRun(
       input({ playbook: 'integrate', tree: integrateTree, inputs: { taskText: 't', ownedPaths: [], conflictPaths: ['a.ts', 'b.ts'] } }),
     );
     const [repair, integrate] = apb.callsTo('playbook_run').map((call) => call.args['params']);
-    expect(repair).toMatchObject({ failing_checks: 'c1: exit 1\nc2: timeout' });
+    expect(repair).toMatchObject({ mode: 'repair', failing_checks: 'c1: exit 1\nc2: timeout' });
     expect(integrate).toEqual({ task_file: '.factory/task.md', conflict_paths: 'a.ts\nb.ts' });
   });
 

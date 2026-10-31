@@ -8,14 +8,13 @@ stored on disk: a restart starts with no notes.
 
 ## Package
 
-1. A TypeScript npm package named `notes-api` whose `start` script runs the
-   server under Node 20 or newer (compiled JavaScript; it must not require
-   Bun to run). When the package has a `build` script, `npm start` runs the
-   built output.
-2. `npm start` listens on the port given in the `PORT` environment
+1. A TypeScript package named `notes-api` whose `start` script runs the
+   server. When the package has a `build` script, `start` runs the built
+   output.
+2. The `start` script listens on the port given in the `PORT` environment
    variable (default `3000`) on all interfaces, and keeps running until it
    is stopped.
-3. `npm test` and `bun test` both run the package's tests and pass.
+3. The package's tests pass.
 4. The package also exports a function `createServer()` from its main
    entry that returns a Node `http.Server` with its own empty note store,
    not yet listening, so tests can start it on any port.

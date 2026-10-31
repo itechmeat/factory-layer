@@ -9,10 +9,8 @@ can be used in shell pipelines.
 
 ## Package
 
-1. A TypeScript npm package named `units` with a `bin` entry `units` that
-   runs under Node 20 or newer (compiled JavaScript or a Node shebang; it
-   must not require Bun to run).
-2. `npm test` and `bun test` both run the package's tests and pass.
+1. A TypeScript package named `units` with a `bin` entry `units`.
+2. The package's tests pass.
 3. Structure: the entry point only dispatches on the command name; each
    command lives in its own module (`src/temp.ts` and `src/length.ts`) and
    exports a pure function, `convertTemp(input: string): string` and

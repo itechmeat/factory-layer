@@ -60,7 +60,7 @@ export const RuntimeSchema = z.enum(RUNTIMES);
  * state, so they never hold a secret.
  */
 export const RunOptionsSchema = z.object({
-  requiredRuntimes: z.array(RuntimeSchema).min(1).default(['bun', 'npm']),
+  requiredRuntimes: z.array(RuntimeSchema).min(1).default(['bun']),
   deliverUnverified: z.boolean().default(false),
   outDir: z.string().min(1).optional(),
   taskAttemptBudget: z.int().min(1).optional(),

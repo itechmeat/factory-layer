@@ -158,6 +158,6 @@ describe('integration', () => {
 
     await run(ports);
 
-    expect(ports.executor.starts[2]).toMatchObject({ playbook: 'repair', tree: 'tree-only-r1' });
+    expect(ports.executor.starts[2]).toMatchObject({ playbook: 'build-task', inputs: { mode: 'repair' }, tree: 'tree-only-r1' });
   });
 });

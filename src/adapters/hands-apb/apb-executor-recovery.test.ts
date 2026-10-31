@@ -34,9 +34,9 @@ function wakeThenDead(): FakeHandler {
 async function startOn(executor: ApbExecutor, runId = RUN_ID, where = tree): Promise<void> {
   const result = await executor.startRun({
     dispatchKey: 'k',
-    playbook: 'implement-task',
+    playbook: 'build-task',
     tree: where,
-    inputs: { taskText: 't', ownedPaths: ['a.ts'] },
+    inputs: { taskText: 't', ownedPaths: ['a.ts'], mode: 'implement' },
   });
   expect(result).toMatchObject({ ok: true, runId });
 }
@@ -233,9 +233,9 @@ describe('a dead apb mcp connection', () => {
     const executor = new ApbExecutor(async () => connections.shift() ?? new FakeApb({}), FAST);
     const result = await executor.startRun({
       dispatchKey: 'k',
-      playbook: 'implement-task',
+      playbook: 'build-task',
       tree,
-      inputs: { taskText: 't', ownedPaths: ['a'] },
+      inputs: { taskText: 't', ownedPaths: ['a'], mode: 'implement' },
     });
     expect(result).toMatchObject({ ok: false, outcome: 'indeterminate' });
     expect(second.callsTo('playbook_run')).toHaveLength(0);
@@ -277,7 +277,7 @@ describe('re-attach after a replacement', () => {
     await startOn(executor, 'run-b', otherTree);
     expect((await executor.waitEvent('run-a', 0, 100)).event).toEqual({ kind: 'terminal', status: 'succeeded' });
     expect(await executor.stop('run-b', 1000)).toMatchObject({ outcome: 'stopped' });
-    expect(await executor.findRuns({ playbook: 'implement-task', tree, notBefore: new Date().toISOString() })).toEqual([]);
+    expect(await executor.findRuns({ playbook: 'build-task', tree, notBefore: new Date().toISOString() })).toEqual([]);
     expect(second.callsTo('supervisor_wait_event')).toHaveLength(0);
   });
 });
@@ -289,9 +289,9 @@ describe('a start in a tree with a live run', () => {
     await startOn(executor, 'run-a', tree);
     const retried = await executor.startRun({
       dispatchKey: 'k',
-      playbook: 'implement-task',
+      playbook: 'build-task',
       tree,
-      inputs: { taskText: 'other', ownedPaths: ['a.ts'] },
+      inputs: { taskText: 'other', ownedPaths: ['a.ts'], mode: 'implement' },
     });
     expect(retried).toMatchObject({ ok: false, outcome: 'refused', policy: 'tree_busy' });
     expect(readFileSync(join(tree, '.factory/task.md'), 'utf8')).toBe('t\n');
@@ -308,9 +308,9 @@ describe('a start in a tree with a live run', () => {
     await executor.attach(RUN_ID, TOKEN);
     const busy = await executor.startRun({
       dispatchKey: 'k',
-      playbook: 'implement-task',
+      playbook: 'build-task',
       tree: otherTree,
-      inputs: { taskText: 'x', ownedPaths: ['a.ts'] },
+      inputs: { taskText: 'x', ownedPaths: ['a.ts'], mode: 'implement' },
     });
     expect(busy).toMatchObject({ ok: false, outcome: 'refused', policy: 'tree_busy' });
     await startOn(executor, 'run-a', tree);

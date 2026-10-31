@@ -6,11 +6,12 @@
  *    `profile.yaml` and `SOUL.md`, with the digest `apb profile show`
  *    reports, which approves its bundle; the write must report trusted, no
  *    failed trust write and no unapproved skills;
- * 2. with `--agent <cli>`, republishes the four starter playbooks through
+ * 2. with `--agent <cli>`, republishes the two starter playbooks through
  *    `playbook_update` with the project profile of that name as their
  *    default profile (a starter that already defaults to it is left alone);
- * 3. approves the smoke playbooks and the four starters through
- *    `playbook_approve`, each of which must come back trusted;
+ * 3. approves the two starters through `playbook_approve`, and the smoke
+ *    playbooks the same way in their own APB project
+ *    (`tests/integration/apb-fixture/`), each of which must come back trusted;
  * 4. prints the trust list entries of what it approved.
  *
  * Every subprocess and MCP call has a timeout; every failure is a
@@ -28,6 +29,9 @@ import { apbMcpCommand } from '../src/adapters/hands-apb/apb-command';
 /** The repository root, where `.apb/` lives. */
 const REPO_ROOT = join(import.meta.dir, '..');
 
+/** The APB project of the integration smokes, apart from the factory's own playbooks. */
+const SMOKE_PROJECT_ROOT = join(REPO_ROOT, 'tests', 'integration', 'apb-fixture');
+
 /** Timeout of one `apb` CLI command, in milliseconds. */
 export const APB_CLI_TIMEOUT_MS = 30_000;
 
@@ -35,14 +39,17 @@ export const APB_CLI_TIMEOUT_MS = 30_000;
 export const APB_APPROVE_TIMEOUT_MS = 30_000;
 
 /** The coding playbooks the factory dispatches; `--agent` switches their default profile. */
-export const STARTER_PLAYBOOKS = ['scaffold', 'implement-task', 'repair', 'integrate'] as const;
+export const STARTER_PLAYBOOKS = ['build-task', 'integrate'] as const;
 
 /**
  * Every playbook the factory runs unattended, approved by explicit
  * confirmation after review: APB cannot trial a script playbook before the
  * first commit, and a starter's trial would run in the factory's own tree.
  */
-export const BOOTSTRAP_PLAYBOOKS = ['smoke', 'smoke-stall', 'smoke-fail', ...STARTER_PLAYBOOKS] as const;
+export const BOOTSTRAP_PLAYBOOKS = [...STARTER_PLAYBOOKS] as const;
+
+/** The script playbooks of the integration smokes, approved in their own APB project. */
+export const SMOKE_PLAYBOOKS = ['smoke', 'smoke-stall', 'smoke-fail'] as const;
 
 /** A bootstrap step failed. */
 export class BootstrapError extends Error {
@@ -309,21 +316,32 @@ async function switchStarters(client: McpStdioClient, agent: string): Promise<st
   return changed;
 }
 
-/** Switches the starters when asked, then approves every bootstrap playbook. */
+/** Approves each of `ids` through `client`. */
+async function approveAll(client: McpStdioClient, ids: readonly string[]): Promise<void> {
+  for (const id of ids) {
+    const answer = await client.callToolParsed('playbook_approve', { id }, z.unknown(), {
+      timeoutMs: APB_APPROVE_TIMEOUT_MS,
+    });
+    checkApproval(id, answer);
+  }
+}
+
+/** Switches the starters when asked and approves them, then approves the smokes in their own project. */
 async function publishAndApprove(agent: string | undefined): Promise<void> {
   const apbPath = Bun.which('apb');
   if (apbPath === null) throw new BootstrapError('apb mcp', 'apb is not on the PATH');
   const client = await connectMcpStdio(apbMcpCommand(apbPath, REPO_ROOT));
   try {
     if (agent !== undefined) for (const line of await switchStarters(client, agent)) console.log(line);
-    for (const id of BOOTSTRAP_PLAYBOOKS) {
-      const answer = await client.callToolParsed('playbook_approve', { id }, z.unknown(), {
-        timeoutMs: APB_APPROVE_TIMEOUT_MS,
-      });
-      checkApproval(id, answer);
-    }
+    await approveAll(client, BOOTSTRAP_PLAYBOOKS);
   } finally {
     await client.close();
+  }
+  const smokes = await connectMcpStdio(apbMcpCommand(apbPath, SMOKE_PROJECT_ROOT));
+  try {
+    await approveAll(smokes, SMOKE_PLAYBOOKS);
+  } finally {
+    await smokes.close();
   }
 }
 
@@ -347,9 +365,10 @@ async function main(): Promise<void> {
     console.log(`profile ${name}: bundle approved`);
   }
   await publishAndApprove(agent);
-  console.log(`playbooks approved: ${BOOTSTRAP_PLAYBOOKS.join(', ')}`);
+  console.log(`playbooks approved: ${[...BOOTSTRAP_PLAYBOOKS, ...SMOKE_PLAYBOOKS].join(', ')}`);
   const list = parseJsonOutput('trust list', await apb('trust list', ['trust', 'list', '--json']), TrustListSchema);
-  for (const line of projectTrustLines(list, { playbookIds: BOOTSTRAP_PLAYBOOKS, bundleDigests })) console.log(line);
+  for (const line of projectTrustLines(list, { playbookIds: [...BOOTSTRAP_PLAYBOOKS, ...SMOKE_PLAYBOOKS], bundleDigests }))
+    console.log(line);
 }
 
 if (import.meta.main) {

@@ -1,0 +1,307 @@
+schema: 2
+id: build-task
+name: Build a task
+description: Builds one planned factory task in the run's working tree and proves it. A coding agent sets up the package (scaffold), implements the task or repairs failing checks, the package's own quality gates run as a script, failures loop back to a fix agent with the gate output, and a reviewer agent checks the diff against the task before the run ends done or blocked. The factory passes the working tree at start and commits the result itself.
+version: 1.0.0
+params:
+- name: task_file
+  type: string
+  label: Path of the task description, relative to the working tree
+  options: null
+  default: null
+- name: owned_paths
+  type: string
+  label: Paths this run may create or change, relative to the working tree, one per line
+  options: null
+  default: null
+- name: mode
+  type: string
+  label: scaffold (set up the package), implement (build the task) or repair (fix failing checks)
+  options:
+  - scaffold
+  - implement
+  - repair
+  default: implement
+- name: failing_checks
+  type: string
+  label: The failing checks a repair fixes, with their reasons and how to run them, one per line
+  options: null
+  default: null
+defaults:
+  profile:
+    name: claude
+    scope: auto
+  max_retries: 1
+  timeout_seconds: null
+  on_failure: stop
+  require_verdict: true
+  max_parallel: 2
+supervisor: null
+trigger:
+  when:
+  - set up, implement or repair one planned factory task in a working tree, proven by quality gates and a review
+  avoid_when:
+  - resolving a merge conflict (use integrate)
+  examples:
+  - implement the task in the task file for these owned paths
+  - repair these failing checks of the task
+requires:
+  files: []
+  commands:
+  - git
+  - bun
+  - node
+effects:
+- fs_read
+- fs_write
+- network
+nodes:
+- id: start
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: start
+- id: build
+  title: Write the code and its tests
+  expected_duration: 8m
+  inputs: null
+  outputs:
+    files: []
+    fields:
+    - summary
+    - checks
+  cache: null
+  type: agent_task
+  prompt: |
+    Read the task description at {{params.task_file}} (relative to your working directory, which is the task's working tree).
+
+    Mode: {{params.mode}}.
+
+    You own only these paths, relative to the working tree:
+    {{params.owned_paths}}
+    Change nothing outside them. If the task cannot be done without that, stop and report it as a failure.
+
+    What to do in each mode:
+    - scaffold: set up the package with the stack below: the manifest, the TypeScript, lint and format configuration, one minimal entry point and one placeholder test. Implement no feature. Install the dev tools with `bun add -d` so `bun.lock` is written.
+    - implement: write a failing test for each behaviour the task asks for, then the code that makes it pass.
+    - repair: these checks fail; reproduce each one first, then fix the code, never the check (never weaken, skip or delete a test):
+      {{params.failing_checks}}
+
+    The stack, unless the task description names another one (then use that one and keep the same script names):
+    - Bun installs, runs the scripts and the tests: `bun install`, `bun test`; tests are `test/<name>.test.ts` written with `bun:test`.
+    - TypeScript in strict mode (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), ESM (`"type": "module"`), `module` and `moduleResolution` NodeNext. `tsc -p tsconfig.json` builds `src/` to `dist/`, so `main` and `bin` point into `dist/src/`; relative imports end in `.js`. A `bin` source starts with `#!/usr/bin/env node`, so the built package runs under Node as well as Bun.
+    - oxlint lints and oxfmt formats; Zod validates every external input (arguments, files, environment, HTTP bodies).
+    - Layers: `src/domain/` pure logic, `src/adapters/` IO, and the entry point (`src/cli.ts` or `src/server.ts`); small modules.
+    - `package.json` scripts: `typecheck` (`tsc --noEmit -p tsconfig.json`), `lint` (`oxlint`), `format` (`oxfmt`), `format:check` (`oxfmt --check`), `build` (`tsc -p tsconfig.json`), `test` (`bun test`), `check` (typecheck, lint, format:check and test in one), and `start` for a server (`node dist/src/server.js`).
+
+    Then run `bun run check`; it must pass. Do not commit.
+    Report in the status file: `summary` (what you changed, one paragraph) and `checks` (each command you ran and its result, one per line).
+  profile: null
+  max_retries: null
+  timeout_seconds: 1800
+  workdir: null
+  isolation: null
+  connectors: []
+  interactive: false
+- id: gates
+  title: Run the package's quality gates
+  expected_duration: 2m
+  inputs: null
+  outputs: null
+  cache: null
+  type: script
+  script: scripts/gates.sh
+  runner: sh
+  timeout_seconds: 600
+- id: gate_check
+  title: Gates verdict
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: condition
+  max_loops: 4
+- id: fix
+  title: Fix what the gates report
+  expected_duration: 5m
+  inputs: null
+  outputs:
+    files: []
+    fields:
+    - summary
+    - checks
+  cache: null
+  type: agent_task
+  prompt: |
+    The quality gates of the package in your working directory failed. Their output:
+
+    {{nodes.gates.output}}
+
+    The task is described at {{params.task_file}}; you own only these paths:
+    {{params.owned_paths}}
+
+    Fix the causes: the code, the types, the lint findings, the formatting (`bun run format`). Never weaken, skip or delete a test or a gate, and never disable a lint rule inline. Then run `bun run check`; it must pass. Do not commit.
+    Report in the status file: `summary` (each failure and its fix, one paragraph) and `checks` (each command you ran and its result, one per line).
+  profile: null
+  max_retries: null
+  timeout_seconds: 900
+  workdir: null
+  isolation: null
+  connectors: []
+  interactive: false
+- id: review
+  title: Review the change against the task
+  expected_duration: 3m
+  inputs: null
+  outputs:
+    files: []
+    fields:
+    - verdict
+    - summary
+    - findings
+  cache: null
+  type: agent_task
+  prompt: |
+    You review a change another agent made in your working directory. Do not edit any file.
+
+    The task is described at {{params.task_file}} (mode: {{params.mode}}); the change may touch only these paths:
+    {{params.owned_paths}}
+
+    Read the change with `git status` and `git diff` (new files included). Check:
+    1. Every behaviour the task asks for is implemented and covered by a test that would fail without it.
+    2. Nothing outside the owned paths changed.
+    3. No test, gate or lint rule was weakened, skipped or disabled.
+    4. External input is validated, errors are handled, and no code is dead or duplicated.
+
+    Report in the status file: `verdict` (`approve`, or `changes` only for a concrete defect from the list above), `summary` (one paragraph) and `findings` (each defect with its file and line, one per line; empty for approve).
+  profile: null
+  max_retries: null
+  timeout_seconds: 600
+  workdir: null
+  isolation: null
+  connectors: []
+  interactive: false
+- id: review_check
+  title: Review verdict
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: condition
+  max_loops: 2
+- id: rework
+  title: Address the review findings
+  expected_duration: 5m
+  inputs: null
+  outputs:
+    files: []
+    fields:
+    - summary
+    - checks
+  cache: null
+  type: agent_task
+  prompt: |
+    A reviewer asked for changes to the work in your working directory:
+
+    {{nodes.review.output}}
+
+    The task is described at {{params.task_file}}; you own only these paths:
+    {{params.owned_paths}}
+
+    Fix every finding. Then run `bun run check`; it must pass. Do not commit.
+    Report in the status file: `summary` (each finding and its fix, one paragraph) and `checks` (each command you ran and its result, one per line).
+  profile: null
+  max_retries: null
+  timeout_seconds: 900
+  workdir: null
+  isolation: null
+  connectors: []
+  interactive: false
+- id: done
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: finish
+  outcome: success
+  prompt: null
+  profile: null
+- id: blocked
+  title: null
+  expected_duration: null
+  inputs: null
+  outputs: null
+  cache: null
+  type: finish
+  outcome: failure
+  prompt: null
+  profile: null
+edges:
+- from: start
+  to: build
+  condition: null
+  fallback: false
+  join: null
+- from: build
+  to: gates
+  condition: null
+  fallback: false
+  join: null
+- from: gates
+  to: gate_check
+  condition: null
+  fallback: false
+  join: null
+- from: gate_check
+  to: review
+  condition:
+    type: node_status
+    node: gates
+    equals: success
+  fallback: false
+  join: null
+- from: gate_check
+  to: fix
+  condition:
+    type: output_match
+    node: gates
+    pattern: 'GATES: red'
+  fallback: false
+  join: null
+- from: gate_check
+  to: blocked
+  condition: null
+  fallback: true
+  join: null
+- from: fix
+  to: gates
+  condition: null
+  fallback: false
+  join: null
+- from: review
+  to: review_check
+  condition: null
+  fallback: false
+  join: null
+- from: review_check
+  to: rework
+  condition:
+    type: output_field
+    node: review
+    field: verdict
+    equals: changes
+  fallback: false
+  join: null
+- from: review_check
+  to: done
+  condition: null
+  fallback: true
+  join: null
+- from: rework
+  to: gates
+  condition: null
+  fallback: false
+  join: null

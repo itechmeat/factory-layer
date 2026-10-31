@@ -36,9 +36,9 @@ function decisionId(events: readonly TraceEvent[], kind: string, taskId?: string
 
 /** Scripts the three-task plan: scaffold first (listed last), then api and cli in parallel. */
 function scriptThreeTasks(ports: FakePorts): void {
-  const scaffold = aTask({ id: 'scaffold', playbook: 'scaffold', ownedPaths: ['package.json', 'src/index.ts'] });
-  const api = aTask({ id: 'api', playbook: 'implement-task', ownedPaths: ['src/api'], dependsOn: ['scaffold'] });
-  const cli = aTask({ id: 'cli', playbook: 'implement-task', ownedPaths: ['src/cli'], dependsOn: ['scaffold'] });
+  const scaffold = aTask({ id: 'scaffold', playbook: 'build-task', ownedPaths: ['package.json', 'src/index.ts'] });
+  const api = aTask({ id: 'api', playbook: 'build-task', ownedPaths: ['src/api'], dependsOn: ['scaffold'] });
+  const cli = aTask({ id: 'cli', playbook: 'build-task', ownedPaths: ['src/cli'], dependsOn: ['scaffold'] });
   ports.brain.script.plan.answerWith({ decision: aPlan([api, cli, scaffold]), delayMs: 100 });
   ports.brain.script.acceptance.answerWith({ decision: [cliCheck({ id: 'help' })], delayMs: 100 });
   ports.brain.script.judge.defaultAnswer({ decision: { outcome: 'accept' }, delayMs: 100 });
@@ -46,7 +46,7 @@ function scriptThreeTasks(ports: FakePorts): void {
   ports.workspace.queueIntegration(SPEC.name, 'cli', 1, { outcome: 'conflict', paths: ['src/index.ts'] });
   ports.workspace.queueIntegration(SPEC.name, 'cli', 1, { outcome: 'ok' });
   ports.executor.onStart((input, runId) => {
-    if (input.playbook === 'scaffold') {
+    if (input.inputs.mode === 'scaffold') {
       ports.executor.pushEvent(runId, { kind: 'wake', seq: 1, trigger: 'node_failed', nodeId: 'code', detail: 'unit tests failed' });
     }
     if (input.playbook === 'integrate') {

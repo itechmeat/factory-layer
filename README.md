@@ -12,7 +12,7 @@ with a cutoff, a hidden-run script and playbook authoring.
 ## Requirements
 
 1. Bun 1.4.4 (`.bun-version`).
-2. git 2.28 or newer, and Node.js with npm (a delivery is checked without Bun).
+2. git 2.28 or newer, and Node.js with npm (a delivery's built output is checked under Node without Bun).
 3. `apb` (Agentic Playbooks) 1.0.0-beta.1 or newer on `PATH`: the factory drives coding
    work through `apb mcp`.
 4. `o2b` (Open Second Brain) 1.96.0 on `PATH`: the factory keeps its memory
@@ -33,8 +33,8 @@ only the factory itself and the hidden-run script are needed.
    brew install git node bash
    ```
 
-   `node` brings npm, which the factory uses to check that a delivery works
-   without Bun. `bash` replaces the bash 3.2 that macOS ships, so acceptance
+   `node` brings npm, which the factory uses to check that a delivery's
+   built output starts without Bun. `bash` replaces the bash 3.2 that macOS ships, so acceptance
    checks written for a current bash run unchanged; keep the Homebrew `bin`
    directory before `/bin` on `PATH` (the Homebrew installer sets it up).
    git must be 2.28 or newer (`git init -b`); the Homebrew one is.
@@ -110,7 +110,7 @@ installed. It names what to fix for every failed check.
 | Option | Effect |
 | --- | --- |
 | `--out <dir>` | Where the package is delivered (default `out/<spec name>`) |
-| `--runtimes bun,npm` | The runtimes the delivered package must pass under |
+| `--runtimes bun,npm` | The runtimes the delivered package must pass under (default `bun`, the stack the factory builds with) |
 | `--deliver-unverified` | Copy the integrated `main` to `--out` before any verification step, so a run cut off or killed during verification still leaves a package |
 | `--cutoff <time>` | `HH:MM` local time today or an ISO 8601 instant with a zone; at that moment the live executor runs are stopped (each stop confirmed within 60 s), late results are discarded and delivery starts with what is integrated |
 | `--task-concurrency <n>` | Task runs at once for this run (default 3; at most 4 executor runs at once across the process) |
@@ -158,8 +158,9 @@ bun run e2e examples/specs/wordfreq.md --deadline-min 30
 
 The end-to-end run is the factory's main acceptance test. It runs
 `factory run` on the practice spec under a unique spec name, then verifies
-the delivered package on its own: the package tests under Bun and under
-npm from clean copies, and every example of the spec under Node. It prints
+the delivered package on its own: the package tests under Bun from a clean
+copy, the build under npm from another (a test script that calls bun is
+not run there), and every example of the spec under Node. It prints
 the outcome, the wall time and the time and cost of every task, and passes
 only when the outcome is `succeeded`, both runtimes pass and every example
 holds. Every child process ends by the absolute deadline.
@@ -263,15 +264,15 @@ per supported agent CLI and named after it:
 | Profile | Agent CLI | Model |
 | --- | --- | --- |
 | `claude` | Claude Code | `claude-sonnet-5-5` |
+| `claude-strong` | Claude Code | `claude-opus-5-5` (the one escalated fix round of `build-task`) |
 | `codex` | Codex | `gpt-6-sol` |
 | `opencode` | opencode | `opencode/glm-5.3-flash-free` |
 | `zcode` | ZCode | `GLM-5.3-Flash` |
 | `agy` | agy | `gemini-3.8-flash-high` |
 | `grok` | Grok | `grok-4.3` |
 
-Each has no fallback and the same short role prompt (`SOUL.md`). The four
-starter playbooks (`scaffold`, `implement-task`, `repair`, `integrate`)
-default to `claude`. To run them with another CLI, run the bootstrap with
+Each has no fallback and the same short role prompt (`SOUL.md`). The two
+starter playbooks (`build-task`, `integrate`) default to `claude`. To run them with another CLI, run the bootstrap with
 `--agent` (below).
 
 Claude Code loads every `CLAUDE.md` from its working directory up to the
@@ -299,11 +300,12 @@ From the repository root it:
    `profile.yaml` and `SOUL.md`, which approves the profile's bundle, and
    checks that the write reports the bundle trusted, with no failed trust
    write and no unapproved skills;
-2. with `--agent <cli>`, republishes the four starter playbooks through APB
+2. with `--agent <cli>`, republishes the two starter playbooks through APB
    with that profile as their default (a new playbook version each; a
    starter that already defaults to it is left alone);
-3. starts `apb mcp` and approves the `smoke`, `smoke-stall` and
-   `smoke-fail` playbooks and the four starters;
+3. starts `apb mcp` and approves the two starters, then does the same
+   for the `smoke`, `smoke-stall` and `smoke-fail` playbooks in their own
+   APB project, `tests/integration/apb-fixture/`;
 4. prints the trust list entries it created.
 
 The playbooks are approved by explicit confirmation rather than by an APB
@@ -313,10 +315,30 @@ repository instead of a task tree. Review them before the first bootstrap.
 The three smokes are single script nodes with no model and no file writes:
 `smoke` prints one fixed line, `smoke-stall` sleeps for an hour so the stop
 path can be exercised, and `smoke-fail` exits 1 so a node failure can be
-observed. Each starter is one agent node that works in the task tree it is
-given, owns only the paths it is told, runs `npm test` and `bun test`, and
-reports a summary and its checks; only `integrate` commits (the merge it
-resolves), and none pushes.
+observed. The smokes are test fixtures of the APB adapter and live apart
+from the factory's playbooks; the factory runs only the two starters,
+which work in the task tree they are given:
+
+1. `build-task` (modes `scaffold`, `implement`, `repair`), 12 nodes: a
+   script routes the run by mode; for a scaffold, `scripts/stack.sh` lays
+   down the factory's default stack (strict TypeScript, oxlint, oxfmt, Bun
+   tests, Zod and the gate scripts, tools pinned). A coding agent builds,
+   then two branches run side by side and join into one verdict:
+   `scripts/gates.sh` runs the package's own quality gates (install, then
+   `typecheck`, `lint`, `format:check`, `build` and `test`; the first four
+   required, so a package cannot skip a gate) while a reviewer agent reads
+   the diff against the task. A red gate or a review finding goes to a fix
+   agent for at most two rounds, a still-red gate or a review still asking
+   for changes then gets one root-cause round on the stronger
+   `claude-strong` profile (Opus), and the run ends `done` or `blocked`
+   (green gates with a review still asking end `done`: the factory's
+   Critic and acceptance checks judge the result).
+2. `integrate`: a coding agent resolves the merge conflict, the same gates
+   run on the combined tree with a fix loop (at most three passes), and
+   `scripts/record-resolution.sh` commits the resolution only when they are
+   green; otherwise the run ends `blocked` with the merge unfinished.
+
+Neither pushes; the factory commits a task's work itself.
 
 APB finds its trust store through `APB_CONFIG_DIR`, then
 `XDG_CONFIG_HOME`, then `HOME`. Set `APB_CONFIG_DIR` to bootstrap and test

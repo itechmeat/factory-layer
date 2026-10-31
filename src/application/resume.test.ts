@@ -139,7 +139,7 @@ describe('resume of live work', () => {
     expect(ports.brain.callsOf('recovery')[0]?.args['failure']).toMatchObject({ reason: 'run_failed' });
     expect(ports.executor.starts.map((start) => [start.playbook, start.dispatchKey])).toEqual([
       ['playbook-feature', `${RUN_ID}|only|r1|a1`],
-      ['repair', `${RUN_ID}|only|r1|a2`],
+      ['build-task', `${RUN_ID}|only|r1|a2`],
     ]);
   });
 });
@@ -205,7 +205,7 @@ describe('resume of stop intents', () => {
 
     expect(ports.executor.starts.map((start) => [start.playbook, start.dispatchKey])).toEqual([
       ['playbook-feature', `${RUN_ID}|only|r1|a1`],
-      ['repair', `${RUN_ID}|only|r1|a2`],
+      ['build-task', `${RUN_ID}|only|r1|a2`],
     ]);
     expect(ports.executor.starts[1]?.inputs.failingChecks).toEqual([{ id: 'help', reason: 'failed' }]);
     const judged = resumed.sink.ofType('decision_started').filter((event) => event.kind === 'judge');

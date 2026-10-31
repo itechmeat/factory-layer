@@ -1,7 +1,7 @@
 /**
  * Failure paths of the independent verification: a broken build fails the
  * runtime before its tests, and the npm runtime sees no `bun` on the PATH,
- * as a Node-only grader would.
+ * as a Node-only grader would, so it skips a test script that calls bun.
  */
 
 import { afterAll, describe, expect, test } from 'bun:test';
@@ -33,9 +33,15 @@ describe('verifyRuntime', () => {
     expect(result.steps[1]?.outputTail).toContain('build-broke');
   });
 
-  test('a Bun-only test script fails under npm', async () => {
+  test('a Bun-only test script is not run under npm, which proves the build under Node', async () => {
     const result = await verify({ test: 'bun --version' }, 'npm');
+    expect(result.passed).toBe(true);
+    expect(result.steps.map((step) => step.name)).toEqual(['npm install']);
+  });
+
+  test('a Node test script that only names bun in a path still runs under npm', async () => {
+    const result = await verify({ test: 'node -e "process.exit(3)" test/bun-compat.test.js' }, 'npm');
     expect(result.passed).toBe(false);
-    expect(result.steps.at(-1)?.exitCode).toBe(127);
+    expect(result.steps.map((step) => `${step.name}:${String(step.passed)}`)).toEqual(['npm install:true', 'npm test:false']);
   });
 });

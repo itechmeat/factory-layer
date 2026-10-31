@@ -10,7 +10,7 @@ import { FOLLOW_RUN_CLEANUP_BUDGET_MS, followRun, type FollowRunOutcome } from '
 import type { StartRecovery } from '../../src/adapters/hands-apb/recover-start';
 import { connectMcpStdio } from '../../src/adapters/mcp-stdio/client';
 import { isProcessAlive } from '../../src/adapters/mcp-stdio/process-teardown';
-import { REPO_ROOT } from './support/apb';
+import { SMOKE_PROJECT_ROOT } from './support/apb';
 import { requireBinary } from './support/prerequisites';
 
 /** Run limit of the `smoke` playbook, in milliseconds. */
@@ -50,11 +50,11 @@ function startFailure(playbookId: string, detail: string, recovery: StartRecover
  * is lost.
  */
 async function followPlaybook(playbookId: string, runLimitMs: number): Promise<FollowRunOutcome> {
-  const worktree = join(REPO_ROOT, 'work', `smoke-${playbookId}-${randomUUID()}`);
+  const worktree = join(SMOKE_PROJECT_ROOT, 'work', `smoke-${playbookId}-${randomUUID()}`);
   mkdirSync(worktree, { recursive: true });
   let outcome: FollowRunOutcome;
   try {
-    const client = await connectMcpStdio(apbMcpCommand(requireBinary('apb'), REPO_ROOT));
+    const client = await connectMcpStdio(apbMcpCommand(requireBinary('apb'), SMOKE_PROJECT_ROOT));
     try {
       outcome = await followRun(client, { playbookId, worktree, runLimitMs });
     } finally {
@@ -114,10 +114,10 @@ test(
   'APB executor smoke: smoke-fail wakes with a node failure, parks quiet, a re-attached executor sees the failure again, a posted retry fails again, the stop is confirmed and the report counts both attempts',
   async () => {
     const deadline = performance.now() + FAIL_SMOKE_LIMIT_MS;
-    const tree = join(REPO_ROOT, 'work', `smoke-fail-${randomUUID()}`);
+    const tree = join(SMOKE_PROJECT_ROOT, 'work', `smoke-fail-${randomUUID()}`);
     mkdirSync(tree, { recursive: true });
     const apbPath = requireBinary('apb');
-    const executor = new ApbExecutor(() => connectMcpStdio(apbMcpCommand(apbPath, REPO_ROOT)));
+    const executor = new ApbExecutor(() => connectMcpStdio(apbMcpCommand(apbPath, SMOKE_PROJECT_ROOT)));
     // Set once the run started: a failed assertion still stops it before its tree is removed.
     let liveRunId: string | undefined;
     try {
@@ -132,7 +132,7 @@ test(
       const first = await nextEvent(executor, start.runId, 0, deadline);
       expect(first.event).toMatchObject({ kind: 'wake', trigger: 'node_failed', nodeId: 'fail' });
       expect((await executor.waitEvent(start.runId, first.nextAfterSeq, 2000)).event).toEqual({ kind: 'quiet' });
-      const restarted = new ApbExecutor(() => connectMcpStdio(apbMcpCommand(apbPath, REPO_ROOT)));
+      const restarted = new ApbExecutor(() => connectMcpStdio(apbMcpCommand(apbPath, SMOKE_PROJECT_ROOT)));
       try {
         expect(await restarted.attach(start.runId, start.supervisorToken)).toMatchObject({ attached: true });
         expect((await restarted.waitEvent(start.runId, first.nextAfterSeq, 2000)).event).toMatchObject({

@@ -103,23 +103,23 @@ describe('plans the hands can run', () => {
       tasks: [{ id: 'a', title: 't', description: 'd', playbook: 'deploy', ownedPaths: [], dependsOn: [] }],
     });
     expect(parsed.success).toBe(false);
-    expect(parsed.error?.issues[0]?.message).toContain('implement-task');
+    expect(parsed.error?.issues[0]?.message).toContain('build-task');
   });
 
   test('a re-plan keeps integrated tasks as they were, even when the model rewrote or dropped them', async () => {
     const task = { title: 't', description: 'd', ownedPaths: [], dependsOn: [] };
     const current: Plan = {
       tasks: [
-        { ...task, id: 'setup', revision: 1, playbook: 'scaffold', ownedPaths: ['package.json'] },
-        { ...task, id: 'core', revision: 2, playbook: 'implement-task', dependsOn: ['setup'] },
-        { ...task, id: 'cli', revision: 1, playbook: 'implement-task', dependsOn: ['core'] },
+        { ...task, id: 'setup', revision: 1, playbook: 'build-task', ownedPaths: ['package.json'] },
+        { ...task, id: 'core', revision: 2, playbook: 'build-task', dependsOn: ['setup'] },
+        { ...task, id: 'cli', revision: 1, playbook: 'build-task', dependsOn: ['core'] },
       ],
     };
     const submitted = {
       tasks: [
-        { ...task, id: 'core', playbook: 'implement-task', description: 'rewritten', dependsOn: ['setup'] },
-        { ...task, id: 'cli', playbook: 'implement-task', description: 'changed', dependsOn: ['core'] },
-        { ...task, id: 'docs', playbook: 'implement-task', dependsOn: ['cli'] },
+        { ...task, id: 'core', playbook: 'build-task', description: 'rewritten', dependsOn: ['setup'] },
+        { ...task, id: 'cli', playbook: 'build-task', description: 'changed', dependsOn: ['core'] },
+        { ...task, id: 'docs', playbook: 'build-task', dependsOn: ['cli'] },
       ],
     };
     const brain = new MozaikBrain({ decider: submitting(submitted), costs: COSTS, replanBudget: 1 });
@@ -139,7 +139,7 @@ describe('MozaikBrain.chooseRecovery, re-plan allowance', () => {
     id: 'cli',
     title: 't',
     description: 'd',
-    playbook: 'implement-task',
+    playbook: 'build-task',
     ownedPaths: ['src/cli.ts'],
     dependsOn: [],
     revision: 1,
@@ -221,7 +221,7 @@ describe('judge', () => {
       id: 'cli',
       title: 't',
       description: 'd',
-      playbook: 'implement-task',
+      playbook: 'build-task',
       ownedPaths: ['a'],
       dependsOn: [],
       revision: 1,

@@ -7,7 +7,7 @@ finish.
    Never read or change anything outside the tree.
 2. Small TypeScript modules with one responsibility each. Every behaviour you
    add gets a unit test that fails without it.
-3. Tests must pass under both `npm test` and `bun test`.
+3. The package's quality gates (`bun run check`) must pass.
 4. Run the checks the task names and report what you ran and what it printed.
    Never claim a check passed that you did not run.
 5. No new dependency unless the task allows it; pin exact versions. No CSS

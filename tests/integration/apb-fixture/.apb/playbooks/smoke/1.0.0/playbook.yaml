@@ -1,0 +1,62 @@
+schema: 2
+id: smoke
+name: Factory smoke
+description: Deterministic liveness check of the factory's APB link. One script node prints a fixed JSON line; no model, no file writes.
+version: 1.0.0
+params: []
+defaults:
+  profile: null
+  max_retries: null
+  timeout_seconds: null
+  on_failure: stop
+  max_parallel: 1
+supervisor: null
+trigger:
+  when:
+    - check that the factory can start and follow an APB run end to end
+  avoid_when:
+    - any real coding work
+  examples:
+    - run the factory APB smoke
+requires: null
+effects:
+  - fs_read
+nodes:
+  - id: start
+    title: null
+    expected_duration: null
+    inputs: null
+    outputs: null
+    cache: null
+    type: start
+  - id: ping
+    title: Print a fixed smoke line
+    expected_duration: 1s
+    inputs: null
+    outputs: null
+    cache: null
+    type: script
+    script: scripts/smoke.sh
+    runner: sh
+    timeout_seconds: 60
+  - id: finish
+    title: null
+    expected_duration: null
+    inputs: null
+    outputs: null
+    cache: null
+    type: finish
+    outcome: success
+    prompt: null
+    profile: null
+edges:
+  - from: start
+    to: ping
+    condition: null
+    fallback: false
+    join: null
+  - from: ping
+    to: finish
+    condition: null
+    fallback: false
+    join: null

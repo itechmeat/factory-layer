@@ -108,7 +108,7 @@ describe('recovery', () => {
     expect(ports.sink.ofType('executor_stopped').map((event) => event.purpose)).toContain('recovery');
     expect(ports.executor.starts.map((start) => [start.playbook, start.dispatchKey])).toEqual([
       ['playbook-feature', 'run-r|only|r1|a1'],
-      ['repair', 'run-r|only|r1|a2'],
+      ['build-task', 'run-r|only|r1|a2'],
     ]);
     expect(ports.executor.starts[1]?.inputs.taskText).toContain('Hint: try again');
   });
@@ -123,7 +123,7 @@ describe('recovery', () => {
 
     const events = ports.sink.events.map((event) => (event.type === 'executor_stopped' ? `stopped:${event.purpose}` : event.type));
     expect(events.indexOf('stopped:recovery')).toBeLessThan(events.lastIndexOf('executor_started'));
-    expect(ports.executor.starts[1]?.playbook).toBe('repair');
+    expect(ports.executor.starts[1]?.playbook).toBe('build-task');
     expect(ports.executor.starts[1]?.inputs.failingChecks).toEqual([
       {
         id: 'help',
@@ -189,7 +189,7 @@ describe('recovery', () => {
 
     expect(ports.sink.ofType('recovery_chosen').map((event) => event.choice)).toEqual(['rebind', 'repair']);
     expect(ports.executor.commands).toEqual([]);
-    expect(ports.executor.starts[1]).toMatchObject({ playbook: 'repair', tree: 'tree-only-r1' });
+    expect(ports.executor.starts[1]).toMatchObject({ playbook: 'build-task', inputs: { mode: 'repair' }, tree: 'tree-only-r1' });
     expect(ports.executor.starts[1]?.inputs.taskText).toContain('Hint: think harder');
   });
 
@@ -262,7 +262,7 @@ describe('recovery', () => {
     expect(ports.brain.callsOf('replan')).toEqual([]);
     expect(ports.sink.ofType('replan_started')).toEqual([]);
     expect(ports.sink.ofType('recovery_chosen').map((event) => event.choice)).toEqual(['replan', 'repair']);
-    expect(ports.executor.starts[1]).toMatchObject({ playbook: 'repair', tree: 'tree-only-r1' });
+    expect(ports.executor.starts[1]).toMatchObject({ playbook: 'build-task', inputs: { mode: 'repair' }, tree: 'tree-only-r1' });
     expect(ports.executor.starts[1]?.inputs.taskText).toContain('tests failed');
     const state = await ports.store.load('run-r');
     expect(state?.replansUsed).toBe(0);

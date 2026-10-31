@@ -71,6 +71,7 @@ export function requestRecord(request: DispatchRequest): DispatchRequestRecord {
     playbook: request.playbook,
     inputs: {
       taskText: inputs.taskText,
+      ...(inputs.mode === undefined ? {} : { mode: inputs.mode }),
       ownedPaths: [...inputs.ownedPaths],
       ...(inputs.failingChecks === undefined ? {} : { failingChecks: inputs.failingChecks.map((check) => ({ ...check })) }),
       ...(inputs.conflictPaths === undefined ? {} : { conflictPaths: [...inputs.conflictPaths] }),
@@ -80,13 +81,14 @@ export function requestRecord(request: DispatchRequest): DispatchRequestRecord {
 
 /** The request of a persisted record (an intent or a continuation). */
 export function requestOf(record: DispatchRequestRecord): DispatchRequest {
-  const { failingChecks, conflictPaths, ...base } = record.inputs;
+  const { mode, failingChecks, conflictPaths, ...base } = record.inputs;
   return {
     taskId: record.taskId,
     role: record.role,
     playbook: record.playbook,
     inputs: {
       ...base,
+      ...(mode === undefined ? {} : { mode }),
       ...(failingChecks === undefined ? {} : { failingChecks }),
       ...(conflictPaths === undefined ? {} : { conflictPaths }),
     },
