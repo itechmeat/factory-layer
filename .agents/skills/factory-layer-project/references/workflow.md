@@ -26,8 +26,8 @@
    fixing a code-ranker finding.
 4. Review cycle: an independent review of the diff (correctness, security,
    tests) plus a duplication sweep with `zg` (zvec-grep): refresh the index
-   (`zg index`, local embedding on the CPU), then for every new exported
-   function, type or helper run `zg query "<what it does>"` and merge real
+   (`zg --index`, local embedding on the CPU), then for every new exported
+   function, type or helper run `zg "<what it does>"` and merge real
    duplicates; code-ranker runs in the full gate. Fix the findings, re-run
    the full gate once.
 5. `/opsx:archive` (skill `openspec-archive-change`), then

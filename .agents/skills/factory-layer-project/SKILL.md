@@ -2,7 +2,7 @@
 name: factory-layer-project
 description: "Working rules for the factory-layer repository (a software factory: Mozaik brain, APB hands, OSB memory; TypeScript on Bun). Use at the start of ANY task in this repository: orchestration, coding, OpenSpec changes, docs, review. Covers roles, TDD, the three check tiers, the layer rule and ports, coding standards, the OpenSpec flow and the self-improvement protocol: when a rule or a gotcha is learned, this skill is updated in the same change."
 metadata:
-  version: "0.5.11"
+  version: "0.5.12"
   created: "2026-10-30"
 ---
 
@@ -92,7 +92,7 @@ The product design lives in
     offering a commit; GitHub CLI work for this repository runs as
     `solaitken`.
 18. **zg and code-ranker in every cycle.** Before writing a new helper,
-    search for an existing one with `zg query`; the review sweeps new code
+    search for an existing one with `zg "<question>"`; the review sweeps new code
     for duplicates with `zg`; `code-ranker check .` is clean (full gate).
     GitHub runs CodeQL (`.github/workflows/codeql.yml`) on every push and
     pull request to `main`.
